@@ -43,7 +43,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
 
   const handleSignupSubmit = (event) => {
     event.preventDefault();
-    setMessage(`Account created! You can now start selling on campus.`);
+    setMessage(`Account created! You can now start selling  and buying on campus.`);
     setSignupForm(signupState);
   };
 
@@ -60,7 +60,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
             </h2>
             <p className="auth-visual-description">
               {isLogin 
-                ? "Access your dashboard, manage listings, and connect with buyers across campus."
+                ? "Access your dashboard and connect with other buyers and sellers across campus."
                 : "Start selling items you no longer need and find amazing deals from fellow students."}
             </p>
 
@@ -82,7 +82,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   </svg>
                 }
                 title="Direct Campus Chat"
-                description="Easy communication with buyers"
+                description="Easy communication with buyers and sellers"
               />
               <FeatureItem 
                 icon={

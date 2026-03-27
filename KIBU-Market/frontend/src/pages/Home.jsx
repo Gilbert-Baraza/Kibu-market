@@ -1,9 +1,13 @@
-import { Suspense, lazy, startTransition, useDeferredValue, useRef, useState } from "react";
+import { Suspense, lazy, startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
 import SearchBar from "../components/SearchBar";
 import ProductList from "../components/ProductList";
 import initialProducts from "../data/products";
+import MessagesScreen from "../components/MessagesScreen";
+import MyListingsScreen from "../components/MyListingsScreen";
+import UserProfileScreen from "../components/UserProfileScreen";
+import ToastViewport from "../components/ToastViewport";
 
 const ProductModal = lazy(() => import("../components/ProductModal"));
 const SellItemForm = lazy(() => import("../components/SellItemForm"));
@@ -17,7 +21,32 @@ function Home() {
   const [savedItems, setSavedItems] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [activePage, setActivePage] = useState("market");
+  const [selectedMessageThreadId, setSelectedMessageThreadId] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [userProfile, setUserProfile] = useState({
+    name: "Campus Seller",
+    email: "seller@kibu.ac.ke",
+    phone: "0700 000 000",
+    campus: "Kibabii University",
+    bio: "Student seller sharing useful finds, study essentials, and room upgrades around campus.",
+  });
   const listingsSectionRef = useRef(null);
+
+  useEffect(() => {
+    if (toasts.length === 0) {
+      return undefined;
+    }
+
+    const timers = toasts.map((toast) =>
+      window.setTimeout(() => {
+        setToasts((currentToasts) => currentToasts.filter((item) => item.id !== toast.id));
+      }, 3200),
+    );
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [toasts]);
 
   const deferredQuery = useDeferredValue(query);
   const categories = ["All", ...new Set(products.map((product) => product.category))];
@@ -59,11 +88,39 @@ function Home() {
   };
 
   const handleSaveToggle = (productId) => {
+    const product = products.find((item) => item.id === productId);
+    const isSaved = savedItems.includes(productId);
+
     setSavedItems((currentItems) =>
-      currentItems.includes(productId)
+      isSaved
         ? currentItems.filter((id) => id !== productId)
         : [...currentItems, productId],
     );
+
+    if (product) {
+      showToast({
+        type: "success",
+        title: isSaved ? "Removed from saved items" : "Saved item",
+        message: isSaved
+          ? `${product.title} was removed from your saved items.`
+          : `${product.title} was added to your saved items.`,
+      });
+    }
+  };
+
+  const showToast = ({ type = "success", title, message }) => {
+    const toast = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      title,
+      message,
+    };
+
+    setToasts((currentToasts) => [...currentToasts, toast]);
+  };
+
+  const dismissToast = (toastId) => {
+    setToasts((currentToasts) => currentToasts.filter((toast) => toast.id !== toastId));
   };
 
   const openSellPage = () => {
@@ -72,6 +129,27 @@ function Home() {
 
   const openLoginPage = () => {
     setActivePage("login");
+  };
+
+  const openMyListingsPage = () => {
+    setSelectedProduct(null);
+    setActivePage("my-listings");
+  };
+
+  const openProfilePage = () => {
+    setSelectedProduct(null);
+    setActivePage("profile");
+  };
+
+  const openMessagesPage = () => {
+    setSelectedProduct(null);
+    setActivePage("messages");
+  };
+
+  const openMessagesForProduct = (product) => {
+    setSelectedMessageThreadId(product.id);
+    setSelectedProduct(null);
+    setActivePage("messages");
   };
 
   const openSignupPage = () => {
@@ -96,8 +174,104 @@ function Home() {
     setQuery("");
     setActivePage("market");
     setSelectedProduct(newProduct);
+    showToast({
+      type: "success",
+      title: "Listing posted",
+      message: `${newProduct.title} is now live in the marketplace.`,
+    });
     requestAnimationFrame(() => {
       scrollToListings();
+    });
+  };
+
+  const handleDeleteListing = (productId) => {
+    const productToDelete = products.find((product) => product.id === productId);
+
+    setProducts((currentProducts) =>
+      currentProducts.filter((product) => product.id !== productId),
+    );
+
+    if (selectedProduct?.id === productId) {
+      setSelectedProduct(null);
+    }
+
+    if (productToDelete) {
+      showToast({
+        type: "success",
+        title: "Listing deleted",
+        message: `${productToDelete.title} was removed from your listings.`,
+      });
+    }
+  };
+
+  const handleToggleListingStatus = (productId) => {
+    const targetProduct = products.find((product) => product.id === productId);
+    const nextStatus = targetProduct?.listingState === "sold" ? "active" : "sold";
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              listingState:
+                product.listingState === "sold" ? "active" : "sold",
+            }
+          : product,
+      ),
+    );
+
+    if (targetProduct) {
+      showToast({
+        type: "success",
+        title: nextStatus === "sold" ? "Listing marked as sold" : "Listing reactivated",
+        message:
+          nextStatus === "sold"
+            ? `${targetProduct.title} is now marked as sold.`
+            : `${targetProduct.title} is active again.`,
+      });
+    }
+  };
+
+  const handleUpdateListing = (productId, updates) => {
+    const targetProduct = products.find((product) => product.id === productId);
+
+    setProducts((currentProducts) =>
+      currentProducts.map((product) =>
+        product.id === productId
+          ? {
+              ...product,
+              ...updates,
+            }
+          : product,
+      ),
+    );
+
+    if (selectedProduct?.id === productId) {
+      setSelectedProduct((currentProduct) =>
+        currentProduct
+          ? {
+              ...currentProduct,
+              ...updates,
+            }
+          : currentProduct,
+      );
+    }
+
+    if (targetProduct) {
+      showToast({
+        type: "success",
+        title: "Listing updated",
+        message: `${updates.title ?? targetProduct.title} was updated successfully.`,
+      });
+    }
+  };
+
+  const handleUpdateProfile = (nextProfile) => {
+    setUserProfile(nextProfile);
+    showToast({
+      type: "success",
+      title: "Profile saved",
+      message: "Your profile details were updated successfully.",
     });
   };
 
@@ -108,14 +282,42 @@ function Home() {
       <Navbar
         onHomeClick={scrollToListings}
         onSellClick={openSellPage}
+        onMyListingsClick={openMyListingsPage}
+        onProfileClick={openProfilePage}
         onLoginClick={openLoginPage}
-        savedCount={savedItems.length}
+        onMessagesClick={openMessagesPage}
+        messageCount={products.filter((product) => (product.messages?.length ?? 0) > 0).length}
       />
       <main>
         {activePage === "sell" ? (
           <Suspense fallback={<PageLoader label="Loading seller tools..." />}>
             <SellItemForm onAddItem={handleAddItem} onBack={scrollToListings} />
           </Suspense>
+        ) : activePage === "my-listings" ? (
+          <MyListingsScreen
+            products={products}
+            onBack={scrollToListings}
+            onCreateListing={openSellPage}
+            onViewListing={setSelectedProduct}
+            onDeleteListing={handleDeleteListing}
+            onToggleListingStatus={handleToggleListingStatus}
+            onUpdateListing={handleUpdateListing}
+          />
+        ) : activePage === "profile" ? (
+          <UserProfileScreen
+            products={products}
+            savedItems={savedItems}
+            userProfile={userProfile}
+            onBack={scrollToListings}
+            onUpdateProfile={handleUpdateProfile}
+            onViewListing={setSelectedProduct}
+          />
+        ) : activePage === "messages" ? (
+          <MessagesScreen
+            products={products}
+            onBack={scrollToListings}
+            initialThreadId={selectedMessageThreadId}
+          />
         ) : activePage === "login" || activePage === "signup" ? (
           <Suspense fallback={<PageLoader label="Loading account page..." />}>
             <AuthScreen
@@ -130,6 +332,8 @@ function Home() {
             <Hero
               savedCount={savedItems.length}
               onSellClick={openSellPage}
+              onMyListingsClick={openMyListingsPage}
+              onProfileClick={openProfilePage}
               onBrowseClick={scrollToListings}
               featuredProducts={products.slice(0, 3)}
             />
@@ -205,12 +409,16 @@ function Home() {
         <Suspense fallback={<PageLoader label="Loading item details..." compact />}>
           <ProductModal
             product={selectedProduct}
+            products={products}
             isSaved={savedItems.includes(selectedProduct.id)}
             onClose={() => setSelectedProduct(null)}
             onSaveToggle={handleSaveToggle}
+            onContactSeller={openMessagesForProduct}
+            onSelectRelatedProduct={setSelectedProduct}
           />
         </Suspense>
       ) : null}
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

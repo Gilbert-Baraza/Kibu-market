@@ -1,0 +1,12 @@
+
+Real auth logic
+Add basic session handling, protected seller pages, and user-specific listings instead of treating everyone as the same seller.
+
+Filters
+Add price range, location filter, category counts, and sort by newest/popularity.
+
+Empty/loading states polish
+Make every page feel complete with better placeholders, loaders, and friendly empty states.
+
+Backend integration
+Move products, auth, messages, and uploads to a real API so the app becomes production-ready.
