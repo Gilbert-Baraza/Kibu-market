@@ -98,7 +98,14 @@ function ProductModal({ product, isSaved, onClose, onSaveToggle }) {
         </button>
 
         <div className="modal-media">
-          <img src={product.image} alt={product.title} className="modal-image" />
+          <img
+            src={product.image}
+            alt={product.title}
+            className="modal-image"
+            loading="eager"
+            decoding="async"
+            sizes="(max-width: 767px) 100vw, 40vw"
+          />
         </div>
 
         <div className="modal-content">

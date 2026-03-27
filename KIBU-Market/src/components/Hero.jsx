@@ -1,53 +1,27 @@
-import heroImage from "../assets/hero.png";
-
-function Hero({ savedCount, onSellClick, onBrowseClick }) {
+function Hero({ onSellClick, onBrowseClick }) {
   return (
     <section className="hero">
-      <div className="hero-copy">
-        <span className="eyebrow">Student marketplace</span>
-        <h1>Buy and sell around campus without the hassle.</h1>
-        <p>
-          Discover affordable essentials from fellow students, from study gear
-          to room upgrades, all posted nearby.
+      <div className="hero-content">
+        <div className="hero-badge">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          <span>#1 Campus Marketplace</span>
+        </div>
+        
+        <h1 className="hero-title">
+          Buy & Sell
+          <br />
+          <span className="hero-title-accent">Around Campus</span>
+        </h1>
+        
+        <p className="hero-description">
+          The easiest way to find student deals. Phones, books, furniture, and more - all from verified students on your campus.
         </p>
-        <div className="hero-actions">
-          <button type="button" className="primary-btn" onClick={onBrowseClick}>
-            Browse Items
-          </button>
-          <button type="button" className="secondary-btn" onClick={onSellClick}>
-            Start Selling
-          </button>
-        </div>
-        <div className="hero-stats">
-          <div>
-            <strong>200+</strong>
-            <span>Weekly listings</span>
-          </div>
-          <div>
-            <strong>24 hrs</strong>
-            <span>Average response time</span>
-          </div>
-          <div>
-            <strong>Nearby</strong>
-            <span>Meetups around hostels</span>
-          </div>
-          <div>
-            <strong>{savedCount}</strong>
-            <span>Items saved for later</span>
-          </div>
-        </div>
+
+      
       </div>
 
-      <div className="hero-visual">
-        <div className="hero-card">
-          <img src={heroImage} alt="Students browsing marketplace listings" />
-          <div className="hero-card-copy">
-            <span>Trending this week</span>
-            <strong>Laptops, calculators, sneakers</strong>
-            <p>Popular picks moving fast across Kibabii hostels and nearby.</p>
-          </div>
-        </div>
-      </div>
     </section>
   );
 }
