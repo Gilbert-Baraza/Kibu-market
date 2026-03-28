@@ -18,6 +18,7 @@ function UserProfileScreen({
   products,
   savedItems,
   userProfile,
+  currentUser,
   onBack,
   onUpdateProfile,
   onViewListing,
@@ -38,7 +39,9 @@ function UserProfileScreen({
   });
 
   const savedProducts = products.filter((product) => savedItems.includes(product.id));
-  const postedProducts = products.filter((product) => product.isOwned);
+  const postedProducts = products.filter(
+    (product) => product.seller?.id === currentUser?.id,
+  );
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -206,7 +209,7 @@ function UserProfileScreen({
                     <img src={product.image} alt={product.title} className="profile-item-image" />
                     <div className="profile-item-copy">
                       <strong>{product.title}</strong>
-                      <span>{product.listingState === "sold" ? "Sold" : "Active"}</span>
+                      <span>{getListingStatusLabel(product.listingState)}</span>
                     </div>
                   </button>
                 ))
@@ -222,3 +225,15 @@ function UserProfileScreen({
 }
 
 export default UserProfileScreen;
+  const getListingStatusLabel = (listingState) => {
+    switch (listingState) {
+      case "draft":
+        return "Draft";
+      case "paused":
+        return "Paused";
+      case "sold":
+        return "Sold";
+      default:
+        return "Active";
+    }
+  };

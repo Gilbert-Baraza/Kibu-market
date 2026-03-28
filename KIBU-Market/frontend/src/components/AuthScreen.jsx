@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import {
+  validateEmail,
+  validatePhone,
+  validateRequiredText,
+} from "../utils/validation";
 
 const loginState = {
   email: "",
@@ -12,39 +17,85 @@ const signupState = {
   password: "",
 };
 
-function AuthScreen({ mode, onModeChange, onBack }) {
+function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
   const [loginForm, setLoginForm] = useState(loginState);
   const [signupForm, setSignupForm] = useState(signupState);
-  const [message, setMessage] = useState("");
+  const [errors, setErrors] = useState({});
+  const [submitMessage, setSubmitMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const isLogin = mode === "login";
 
   useEffect(() => {
-    setMessage("");
+    setErrors({});
+    setSubmitMessage("");
     setShowPassword(false);
   }, [mode]);
+
+  const validateLoginForm = (values) => ({
+    email: validateEmail(values.email),
+    password: validateRequiredText(values.password, "Password", 6),
+  });
+
+  const validateSignupForm = (values) => ({
+    name: validateRequiredText(values.name, "Full name", 2),
+    email: validateEmail(values.email),
+    phone: validatePhone(values.phone),
+    password: validateRequiredText(values.password, "Password", 6),
+  });
 
   const handleLoginChange = (event) => {
     const { name, value } = event.target;
     setLoginForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: "" }));
+    setSubmitMessage("");
   };
 
   const handleSignupChange = (event) => {
     const { name, value } = event.target;
     setSignupForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: "" }));
+    setSubmitMessage("");
   };
 
   const handleLoginSubmit = (event) => {
     event.preventDefault();
-    setMessage(`Welcome back! Your account is ready.`);
-    setLoginForm(loginState);
+    const nextErrors = validateLoginForm(loginForm);
+    setErrors(nextErrors);
+    setSubmitMessage("");
+
+    if (Object.values(nextErrors).some(Boolean)) {
+      return;
+    }
+
+    const result = onLogin?.(loginForm);
+
+    if (result?.ok) {
+      setLoginForm(loginState);
+      return;
+    }
+
+    setSubmitMessage(result?.message ?? "We could not sign you in with those details.");
   };
 
   const handleSignupSubmit = (event) => {
     event.preventDefault();
-    setMessage(`Account created! You can now start selling  and buying on campus.`);
-    setSignupForm(signupState);
+    const nextErrors = validateSignupForm(signupForm);
+    setErrors(nextErrors);
+    setSubmitMessage("");
+
+    if (Object.values(nextErrors).some(Boolean)) {
+      return;
+    }
+
+    const result = onSignup?.(signupForm);
+
+    if (result?.ok) {
+      setSignupForm(signupState);
+      return;
+    }
+
+    setSubmitMessage(result?.message ?? "We could not create that account.");
   };
 
   return (
@@ -177,6 +228,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   value={loginForm.email}
                   onChange={handleLoginChange}
                   placeholder="name@studentmail.com"
+                  error={errors.email}
                   icon={
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -192,6 +244,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   value={loginForm.password}
                   onChange={handleLoginChange}
                   placeholder="Enter your password"
+                  error={errors.password}
                   icon={
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
@@ -241,6 +294,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   value={signupForm.name}
                   onChange={handleSignupChange}
                   placeholder="Your full name"
+                  error={errors.name}
                   icon={
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -256,6 +310,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   value={signupForm.email}
                   onChange={handleSignupChange}
                   placeholder="name@studentmail.com"
+                  error={errors.email}
                   icon={
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -270,6 +325,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   value={signupForm.phone}
                   onChange={handleSignupChange}
                   placeholder="07xx xxx xxx"
+                  error={errors.phone}
                   icon={
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
@@ -284,6 +340,7 @@ function AuthScreen({ mode, onModeChange, onBack }) {
                   value={signupForm.password}
                   onChange={handleSignupChange}
                   placeholder="Create a strong password"
+                  error={errors.password}
                   icon={
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
@@ -328,13 +385,14 @@ function AuthScreen({ mode, onModeChange, onBack }) {
               </form>
             )}
 
-            {message && (
-              <div className="auth-success">
+            {submitMessage && (
+              <div className="auth-error">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                  <polyline points="22 4 12 14.01 9 11.01"/>
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
                 </svg>
-                {message}
+                {submitMessage}
               </div>
             )}
           </div>
@@ -356,7 +414,17 @@ function FeatureItem({ icon, title, description }) {
   );
 }
 
-function FormField({ label, name, type = "text", value, onChange, placeholder, icon, rightIcon }) {
+function FormField({
+  label,
+  name,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  icon,
+  rightIcon,
+  error,
+}) {
   return (
     <div className="auth-form-field">
       <label htmlFor={name} className="auth-form-label">{label}</label>
@@ -370,10 +438,12 @@ function FormField({ label, name, type = "text", value, onChange, placeholder, i
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className={`auth-input ${icon ? 'has-icon' : ''}`}
+          className={`auth-input ${icon ? 'has-icon' : ''} ${error ? "auth-input-error" : ""}`}
+          aria-invalid={Boolean(error)}
         />
         {rightIcon && <div className="auth-input-right">{rightIcon}</div>}
       </div>
+      {error ? <small className="auth-field-error">{error}</small> : null}
     </div>
   );
 }

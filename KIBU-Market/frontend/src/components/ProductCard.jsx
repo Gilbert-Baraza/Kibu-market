@@ -3,6 +3,19 @@ function ProductCard({ product, isSaved, onSaveToggle, onViewDetails }) {
     onViewDetails(product);
   };
 
+  const getListingStatusLabel = (listingState) => {
+    switch (listingState) {
+      case "draft":
+        return "Draft";
+      case "paused":
+        return "Paused";
+      case "sold":
+        return "Sold";
+      default:
+        return "Active";
+    }
+  };
+
   return (
     <article
       className="product-card"
@@ -40,6 +53,9 @@ function ProductCard({ product, isSaved, onSaveToggle, onViewDetails }) {
           </svg>
         </button>
         <div className="product-category-badge">{product.category}</div>
+        <div className={`product-state-badge ${product.listingState ?? "active"}`}>
+          {getListingStatusLabel(product.listingState)}
+        </div>
       </div>
       
       <div className="product-content">

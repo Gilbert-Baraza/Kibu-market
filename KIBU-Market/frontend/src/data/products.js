@@ -1,4 +1,4 @@
-const products = [
+const rawProducts = [
   {
     id: 1,
     title: "HP Laptop",
@@ -351,7 +351,22 @@ const products = [
     image:
       "https://images.unsplash.com/photo-1603252109303-2751441dd157?auto=format&fit=crop&w=900&q=80"
   }
-
 ];
+
+function createSellerId(name) {
+  return String(name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+const products = rawProducts.map((product) => ({
+  ...product,
+  seller: {
+    ...product.seller,
+    id: product.seller?.id ?? createSellerId(product.seller?.name),
+  },
+}));
 
 export default products;

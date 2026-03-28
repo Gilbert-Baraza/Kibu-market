@@ -9,13 +9,13 @@ const initialFormState = {
   title: "",
   price: "",
   category: "Electronics",
+  listingState: "active",
   location: "",
-  sellerName: "",
   description: "",
   tags: "",
 };
 
-function SellItemForm({ onAddItem, onBack }) {
+function SellItemForm({ onAddItem, onBack, currentUser }) {
   const [formData, setFormData] = useState(initialFormState);
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState("");
@@ -24,7 +24,6 @@ function SellItemForm({ onAddItem, onBack }) {
     title: validateRequiredText(values.title, "Item title", 3),
     price: validatePrice(values.price),
     location: validateRequiredText(values.location, "Pickup location", 3),
-    sellerName: validateRequiredText(values.sellerName, "Seller name", 2),
     description: validateRequiredText(values.description, "Description", 20),
   });
 
@@ -83,6 +82,7 @@ function SellItemForm({ onAddItem, onBack }) {
       title: formData.title.trim(),
       price: Number(formData.price),
       category: formData.category,
+      listingState: formData.listingState,
       location: formData.location.trim(),
       description: formData.description.trim(),
       image:
@@ -93,11 +93,11 @@ function SellItemForm({ onAddItem, onBack }) {
         .map((tag) => tag.trim().toLowerCase())
         .filter(Boolean),
       seller: {
-        name: formData.sellerName.trim(),
+        id: currentUser.id,
+        name: currentUser.name,
         status: "just posted",
+        phone: currentUser.phone,
       },
-      isOwned: true,
-      listingState: "active",
       messages: [
         {
           id: `seed-${Date.now()}`,
@@ -174,6 +174,16 @@ function SellItemForm({ onAddItem, onBack }) {
           </select>
         </label>
 
+        <label className="form-field">
+          <span>Listing status</span>
+          <select name="listingState" value={formData.listingState} onChange={handleChange}>
+            <option value="draft">Draft</option>
+            <option value="paused">Paused</option>
+            <option value="active">Active</option>
+            <option value="sold">Sold</option>
+          </select>
+        </label>
+
         <label className={errors.location ? "form-field has-error" : "form-field"}>
           <span>Pickup location</span>
           <input
@@ -187,18 +197,13 @@ function SellItemForm({ onAddItem, onBack }) {
           {errors.location ? <small className="form-field-error">{errors.location}</small> : null}
         </label>
 
-        <label className={errors.sellerName ? "form-field has-error" : "form-field"}>
-          <span>Seller name</span>
-          <input
-            name="sellerName"
-            value={formData.sellerName}
-            onChange={handleChange}
-            onBlur={handleBlur}
-            placeholder="Your full name"
-            aria-invalid={Boolean(errors.sellerName)}
-          />
-          {errors.sellerName ? <small className="form-field-error">{errors.sellerName}</small> : null}
-        </label>
+        <div className="form-field">
+          <span>Seller account</span>
+          <div className="form-readonly">
+            <strong>{currentUser.name}</strong>
+            <small>{currentUser.email}</small>
+          </div>
+        </div>
 
         <label className="form-field form-field-wide">
           <span>Upload image</span>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ChatConversation from "./ChatConversation";
 
-function MessagesScreen({ products, onBack, initialThreadId = null }) {
+function MessagesScreen({ products, currentUser, onBack, initialThreadId = null }) {
   const [activeInbox, setActiveInbox] = useState("buyer");
   const [searchQuery, setSearchQuery] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
@@ -40,12 +40,18 @@ function MessagesScreen({ products, onBack, initialThreadId = null }) {
   );
 
   const buyerThreads = useMemo(
-    () => allThreads.filter((product) => !product.isOwned),
-    [allThreads],
+    () =>
+      allThreads.filter((product) =>
+        currentUser ? product.seller?.id !== currentUser.id : true,
+      ),
+    [allThreads, currentUser],
   );
   const sellerThreads = useMemo(
-    () => allThreads.filter((product) => product.isOwned),
-    [allThreads],
+    () =>
+      currentUser
+        ? allThreads.filter((product) => product.seller?.id === currentUser.id)
+        : [],
+    [allThreads, currentUser],
   );
 
   const currentInboxThreads = activeInbox === "seller" ? sellerThreads : buyerThreads;

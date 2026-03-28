@@ -7,14 +7,17 @@ import {
 
 function MyListingsScreen({
   products,
+  currentUser,
   onBack,
   onCreateListing,
   onViewListing,
   onDeleteListing,
-  onToggleListingStatus,
+  onChangeListingStatus,
   onUpdateListing,
 }) {
-  const ownedListings = products.filter((product) => product.isOwned);
+  const ownedListings = products.filter(
+    (product) => product.seller?.id === currentUser?.id,
+  );
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({
     title: "",
@@ -116,6 +119,19 @@ function MyListingsScreen({
     cancelEditing();
   };
 
+  const getListingStatusLabel = (listingState) => {
+    switch (listingState) {
+      case "draft":
+        return "Draft";
+      case "paused":
+        return "Paused";
+      case "sold":
+        return "Sold";
+      default:
+        return "Active";
+    }
+  };
+
   return (
     <section className="my-listings-screen">
       <div className="messages-header">
@@ -158,18 +174,16 @@ function MyListingsScreen({
                       onChange={handleEditChange}
                       className="listing-status-select"
                     >
+                      <option value="draft">Draft</option>
+                      <option value="paused">Paused</option>
                       <option value="active">Active</option>
                       <option value="sold">Sold</option>
                     </select>
                   ) : (
                     <span
-                      className={
-                        product.listingState === "sold"
-                          ? "listing-status sold"
-                          : "listing-status active"
-                      }
+                      className={`listing-status ${product.listingState ?? "active"}`}
                     >
-                      {product.listingState === "sold" ? "Sold" : "Active"}
+                      {getListingStatusLabel(product.listingState)}
                     </span>
                   )}
                 </div>
@@ -271,9 +285,30 @@ function MyListingsScreen({
                       <button
                         type="button"
                         className="secondary-btn"
-                        onClick={() => onToggleListingStatus(product.id)}
+                        onClick={() => onChangeListingStatus(product.id, "draft")}
                       >
-                        {product.listingState === "sold" ? "Mark active" : "Mark sold"}
+                        Draft
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => onChangeListingStatus(product.id, "paused")}
+                      >
+                        Pause
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => onChangeListingStatus(product.id, "active")}
+                      >
+                        Activate
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => onChangeListingStatus(product.id, "sold")}
+                      >
+                        Mark sold
                       </button>
                       <button
                         type="button"
