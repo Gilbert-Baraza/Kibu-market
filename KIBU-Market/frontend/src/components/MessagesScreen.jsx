@@ -114,6 +114,7 @@ function MessagesScreen({
   const [messengerTheme, setMessengerTheme] = useState(getStoredMessengerTheme);
   const [isMobileLayout, setIsMobileLayout] = useState(() => window.innerWidth <= MOBILE_BREAKPOINT);
   const [showMobileChat, setShowMobileChat] = useState(Boolean(initialProductId));
+  const [pendingOutgoingMessage, setPendingOutgoingMessage] = useState(null);
   const threadRef = useRef(null);
   const pendingReadThreadIdRef = useRef(null);
   const typingConversationIdRef = useRef(null);
@@ -264,6 +265,30 @@ function MessagesScreen({
     filteredThreads.find((thread) => String(thread.product.id) === String(initialProductId)) ??
     filteredThreads[0] ??
     null;
+  const selectedThreadMessages = useMemo(() => {
+    if (!selectedThread) {
+      return [];
+    }
+
+    const messages = [...selectedThread.messages];
+
+    if (
+      pendingOutgoingMessage &&
+      pendingOutgoingMessage.threadKey === selectedThread.key
+    ) {
+      messages.push({
+        id: pendingOutgoingMessage.id,
+        sender: selectedThread.role === "selling" ? "seller" : "buyer",
+        text: pendingOutgoingMessage.text,
+        time: "Now",
+        createdAt: new Date().toISOString(),
+        deliveryStatus: "sending",
+        isRead: false,
+      });
+    }
+
+    return messages;
+  }, [pendingOutgoingMessage, selectedThread]);
 
   useEffect(() => {
     if (!selectedThread?.id || !onMarkThreadRead) {
@@ -375,19 +400,32 @@ function MessagesScreen({
       ? selectedThread.buyerId
       : selectedThread.sellerId;
 
-    const result = await onSendMessage({
-      threadId: selectedThread.id,
-      productId: selectedThread.product.id,
-      recipientId,
+    const pendingMessageId = `pending-${Date.now()}`;
+    setPendingOutgoingMessage({
+      id: pendingMessageId,
+      threadKey: selectedThread.key,
       text: trimmedMessage,
     });
 
-    if (result?.ok) {
-      stopTypingForConversation(selectedThread.id);
-      setDraftMessage("");
-      if (result.thread?.id) {
-        setSelectedKey(`thread-${result.thread.id}`);
+    try {
+      const result = await onSendMessage({
+        threadId: selectedThread.id,
+        productId: selectedThread.product.id,
+        recipientId,
+        text: trimmedMessage,
+      });
+
+      if (result?.ok) {
+        stopTypingForConversation(selectedThread.id);
+        setDraftMessage("");
+        if (result.thread?.id) {
+          setSelectedKey(`thread-${result.thread.id}`);
+        }
       }
+    } finally {
+      setPendingOutgoingMessage((current) =>
+        current?.id === pendingMessageId ? null : current,
+      );
     }
   };
 
@@ -536,7 +574,7 @@ function MessagesScreen({
             {selectedThread ? (
               <ChatConversation
                 product={selectedThread.product}
-                messages={selectedThread.messages}
+                messages={selectedThreadMessages}
                 draftMessage={draftMessage}
                 onDraftChange={handleDraftChange}
                 onSendMessage={handleSend}

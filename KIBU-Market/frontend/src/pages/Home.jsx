@@ -163,6 +163,82 @@ function getThreadUnreadCountForUser(thread, currentUser) {
   return Number(thread.unreadCount ?? 0);
 }
 
+function getCategoryIcon(category) {
+  switch (String(category).toLowerCase()) {
+    case "all":
+      return "grid";
+    case "electronics":
+      return "device";
+    case "books":
+      return "book";
+    case "furniture":
+      return "home";
+    case "fashion":
+    case "clothing":
+      return "spark";
+    case "hostel":
+    case "hostel items":
+      return "home";
+    default:
+      return "tag";
+  }
+}
+
+function CategoryIcon({ type }) {
+  if (type === "device") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="7" y="2" width="10" height="20" rx="2" />
+        <line x1="11" y1="18" x2="13" y2="18" />
+      </svg>
+    );
+  }
+
+  if (type === "book") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      </svg>
+    );
+  }
+
+  if (type === "home") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5 9.5V21h14V9.5" />
+      </svg>
+    );
+  }
+
+  if (type === "spark") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" />
+      </svg>
+    );
+  }
+
+  if (type === "tag") {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m20.59 13.41-7.18 7.18a2 2 0 0 1-2.82 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+        <line x1="7" y1="7" x2="7.01" y2="7" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 function Home() {
   const [products, setProducts] = useState([]);
   const [threads, setThreads] = useState([]);
@@ -398,6 +474,14 @@ function Home() {
   });
 
   const deferredQuery = useDeferredValue(query);
+  const isSidebarlessPage =
+    activePage === "market" ||
+    activePage === "messages" ||
+    activePage === "sell" ||
+    activePage === "my-listings" ||
+    activePage === "profile" ||
+    activePage === "login" ||
+    activePage === "signup";
   const categories = useMemo(
     () => ["All", ...new Set(products.map((product) => product.category))],
     [products],
@@ -412,6 +496,7 @@ function Home() {
   );
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const recentlyPostedProducts = sortProductsByLatest(products).slice(0, 4);
   let visibleProducts = products.filter((product) => {
     if (blockedSellerIds.includes(product.seller?.id)) {
       return false;
@@ -996,10 +1081,6 @@ function Home() {
     });
   };
 
-  if (isBootstrapping) {
-    return <PageLoader label="Connecting to the marketplace API..." />;
-  }
-
   return (
     <div className="page-shell">
       <div className="page-glow page-glow-left" />
@@ -1007,6 +1088,9 @@ function Home() {
       <Navbar
         className={activePage === "messages" ? "messages-navbar" : ""}
         onHomeClick={scrollToListings}
+        onMyListingsClick={openMyListingsPage}
+        onProfileClick={openProfilePage}
+        onSignInClick={() => setActivePage("login")}
         onSellClick={openSellPage}
         onLogoutClick={handleLogout}
         onMessagesClick={openMessagesPage}
@@ -1014,8 +1098,19 @@ function Home() {
         messageCount={unreadMessageCount}
       />
       <main className={activePage === "messages" ? "page-main messages-main" : "page-main"}>
-        <div className={activePage === "messages" ? "app-layout messages-layout" : "app-layout"}>
-          <aside className="desktop-side-menu" aria-label="Desktop navigation">
+        <div
+          className={
+            activePage === "messages"
+              ? "app-layout messages-layout chat-layout"
+              : isSidebarlessPage
+                ? "app-layout content-layout"
+                : "app-layout"
+          }
+        >
+          {isSidebarlessPage
+            ? null
+            : (
+            <aside className="desktop-side-menu" aria-label="Desktop navigation">
             <div className="desktop-side-menu-card">
               <div className="desktop-side-menu-header">
                 <span className="section-label">Navigate</span>
@@ -1106,9 +1201,10 @@ function Home() {
                 </div>
               </div>
             </div>
-          </aside>
+            </aside>
+          )}
 
-          <div className={activePage === "messages" ? "app-content messages-content" : "app-content"}>
+          <div className={activePage === "messages" ? "app-content messages-content chat-content" : "app-content"}>
             {bootstrapError ? (
               <div className="empty-state">
                 <span className="section-label">API unavailable</span>
@@ -1178,51 +1274,81 @@ function Home() {
               </Suspense>
             ) : (
               <>
-                <Hero />
+                {isBootstrapping ? (
+                  <MarketSkeleton />
+                ) : (
+                  <>
+                    <Hero
+                      products={recentlyPostedProducts}
+                      onBrowseClick={scrollToListings}
+                      onSellClick={openSellPage}
+                    />
 
-                <section className="products-section" ref={listingsSectionRef}>
-                  <SearchBar
-                    query={query}
-                    onQueryChange={handleSearchChange}
-                    resultCount={visibleProducts.length}
-                    totalCount={products.length}
-                  />
+                    <section className="products-section" ref={listingsSectionRef}>
+                      <SearchBar
+                        query={query}
+                        onQueryChange={handleSearchChange}
+                        resultCount={visibleProducts.length}
+                        totalCount={products.length}
+                      />
 
-                  <div className="market-controls">
-                    <div className="category-filter" aria-label="Filter by category">
-                      {categories.map((category) => (
-                        <button
-                          key={category}
-                          type="button"
-                          className={
-                            category === activeCategory ? "filter-chip active" : "filter-chip"
-                          }
-                          onClick={() => setActiveCategory(category)}
-                        >
-                          {category}
-                        </button>
-                      ))}
-                    </div>
+                      <div className="market-controls">
+                        <div className="category-filter" aria-label="Filter by category">
+                          {categories.map((category) => (
+                            <button
+                              key={category}
+                              type="button"
+                              className={
+                                category === activeCategory ? "filter-chip active" : "filter-chip"
+                              }
+                              onClick={() => setActiveCategory(category)}
+                            >
+                              <span className="filter-chip-icon">
+                                <CategoryIcon type={getCategoryIcon(category)} />
+                              </span>
+                              <span>{category}</span>
+                            </button>
+                          ))}
+                        </div>
 
-                    <label className="sort-control">
-                      <span>Sort by</span>
-                      <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                        <option value="latest">Latest</option>
-                        <option value="price-low">Price: low to high</option>
-                        <option value="price-high">Price: high to low</option>
-                        <option value="title">Alphabetical</option>
-                      </select>
-                    </label>
-                  </div>
+                        <label className="sort-control">
+                          <span>Sort by</span>
+                          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+                            <option value="latest">Latest</option>
+                            <option value="price-low">Price: low to high</option>
+                            <option value="price-high">Price: high to low</option>
+                            <option value="title">Alphabetical</option>
+                          </select>
+                        </label>
+                      </div>
 
-                  <ProductList
-                    key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
-                    products={visibleProducts}
-                    savedItems={savedItems}
-                    onSaveToggle={handleSaveToggle}
-                    onViewDetails={setSelectedProduct}
-                  />
-                </section>
+                      <div className="marketplace-section-heading marketplace-list-heading">
+                        <div>
+                          <span className="section-label">Recently posted</span>
+                          <h2>Fresh listings from campus sellers</h2>
+                        </div>
+                        <p>Browse fast, message faster, and close deals before someone else does.</p>
+                      </div>
+
+                      <ProductList
+                        key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
+                        products={visibleProducts}
+                        savedItems={savedItems}
+                        onSaveToggle={handleSaveToggle}
+                        onViewDetails={setSelectedProduct}
+                        onQuickChat={openMessagesForProduct}
+                      />
+                    </section>
+
+                    <button type="button" className="mobile-sell-fab" onClick={openSellPage}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                      Sell
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -1254,6 +1380,63 @@ function PageLoader({ label, compact = false }) {
     <div className={compact ? "page-loader page-loader-compact" : "page-loader"}>
       <div className="page-loader-spinner" aria-hidden="true" />
       <p>{label}</p>
+    </div>
+  );
+}
+
+function MarketSkeleton() {
+  return (
+    <div className="market-skeleton-shell" aria-hidden="true">
+      <section className="hero hero-marketplace market-skeleton-hero">
+        <div className="hero-content">
+          <div className="skeleton-line skeleton-pill" />
+          <div className="skeleton-line skeleton-heading" />
+          <div className="skeleton-line skeleton-heading skeleton-heading-accent" />
+          <div className="skeleton-line skeleton-body" />
+          <div className="skeleton-line skeleton-body skeleton-body-short" />
+          <div className="market-skeleton-actions">
+            <div className="skeleton-line skeleton-button" />
+            <div className="skeleton-line skeleton-button skeleton-button-secondary" />
+          </div>
+        </div>
+        <div className="hero-preview-shell market-skeleton-preview">
+          <div className="skeleton-line skeleton-card-heading" />
+          <div className="market-skeleton-mini-list">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={`hero-skeleton-${index}`} className="market-skeleton-mini-card">
+                <div className="skeleton-block skeleton-thumb" />
+                <div className="market-skeleton-copy">
+                  <div className="skeleton-line skeleton-mini-title" />
+                  <div className="skeleton-line skeleton-mini-copy" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="products-section">
+        <div className="search-container market-skeleton-search">
+          <div className="skeleton-line skeleton-search" />
+        </div>
+        <div className="market-skeleton-chips">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={`chip-${index}`} className="skeleton-line skeleton-chip" />
+          ))}
+        </div>
+        <div className="product-list market-skeleton-grid">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={`card-${index}`} className="market-skeleton-card">
+              <div className="skeleton-block skeleton-card-image" />
+              <div className="market-skeleton-card-copy">
+                <div className="skeleton-line skeleton-mini-title" />
+                <div className="skeleton-line skeleton-mini-copy" />
+                <div className="skeleton-line skeleton-mini-copy skeleton-mini-copy-short" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

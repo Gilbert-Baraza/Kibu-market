@@ -1,5 +1,54 @@
 import { useEffect, useRef } from "react";
 
+function MessageStatusTicks({ status = "delivered" }) {
+  if (status === "sending") {
+    return (
+      <span
+        className="messenger-message-status sending"
+        aria-label="Sending"
+        title="Sending"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path
+            d="M3.1 8.35 5.7 10.95 10.25 6.4"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </span>
+    );
+  }
+
+  const isRead = status === "read";
+
+  return (
+    <span
+      className={isRead ? "messenger-message-status read" : "messenger-message-status"}
+      aria-label={isRead ? "Read" : "Delivered"}
+      title={isRead ? "Read" : "Delivered"}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path
+          d="M1.75 8.75 4.4 11.4 8.6 6.75"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M6.25 8.75 8.9 11.4 13.1 6.75"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
 function ChatConversation({
   product,
   messages,
@@ -110,7 +159,14 @@ function ChatConversation({
               <div className={isCurrentUser ? "messenger-bubble mine" : "messenger-bubble"}>
                 {!isCurrentUser ? <span className="messenger-bubble-author">{otherParticipantName}</span> : null}
                 <p>{message.text}</p>
-                <span className="messenger-bubble-time">{message.time}</span>
+                <span className="messenger-bubble-meta">
+                  <span className="messenger-bubble-time">{message.time}</span>
+                  {isCurrentUser ? (
+                    <MessageStatusTicks
+                      status={message.deliveryStatus ?? (message.isRead ? "read" : "delivered")}
+                    />
+                  ) : null}
+                </span>
               </div>
             </div>
           );

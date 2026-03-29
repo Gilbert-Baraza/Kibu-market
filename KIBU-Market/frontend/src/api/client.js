@@ -85,6 +85,16 @@ export function normalizeMessage(message) {
     message.senderType ??
     message.sender ??
     (message.isFromSeller ? "seller" : "buyer");
+  const readBy = ensureArray(message.readBy).map((entry) => {
+    if (typeof entry === "string") {
+      return entry;
+    }
+
+    return entry?.id ?? entry?._id ?? entry?.userId ?? "";
+  }).filter(Boolean);
+  const isRead =
+    Boolean(message.isRead ?? message.read ?? message.readAt) ||
+    readBy.length > 1;
 
   return {
     id: message.id ?? message._id ?? crypto.randomUUID(),
@@ -92,6 +102,8 @@ export function normalizeMessage(message) {
     text: message.text ?? message.body ?? message.message ?? "",
     time: formatMessageTime(message.createdAt ?? message.updatedAt ?? message.time),
     createdAt: message.createdAt ?? message.updatedAt ?? null,
+    readBy,
+    isRead,
   };
 }
 

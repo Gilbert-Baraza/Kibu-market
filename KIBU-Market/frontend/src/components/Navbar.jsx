@@ -1,17 +1,5 @@
 ﻿import { useState } from "react";
 
-function formatMessageLabel(messageCount) {
-  if (messageCount <= 0) {
-    return "All caught up";
-  }
-
-  if (messageCount === 1) {
-    return "1 new";
-  }
-
-  return `${messageCount} new`;
-}
-
 function getUserInitials(name) {
   const parts = String(name ?? "")
     .trim()
@@ -28,6 +16,9 @@ function getUserInitials(name) {
 
 function Navbar({
   onHomeClick,
+  onMyListingsClick,
+  onProfileClick,
+  onSignInClick,
   onSellClick,
   onLogoutClick,
   onMessagesClick,
@@ -42,7 +33,6 @@ function Navbar({
     callback();
   };
 
-  const messageLabel = formatMessageLabel(messageCount);
   const userInitials = getUserInitials(currentUser?.name);
 
   return (
@@ -91,6 +81,18 @@ function Navbar({
         <div className={isMobileMenuOpen ? "nav-actions mobile-open" : "nav-actions"}>
           <button
             type="button"
+            className="nav-link nav-mobile-only"
+            onClick={() => handleNavAction(onHomeClick)}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            <span>Home</span>
+          </button>
+
+          <button
+            type="button"
             className="nav-link nav-link-icon"
             onClick={() => handleNavAction(onMessagesClick)}
           >
@@ -104,9 +106,36 @@ function Navbar({
             </span>
             <span className="nav-link-copy">
               <span>Messages</span>
-              <small className="nav-link-meta">{messageLabel}</small>
             </span>
           </button>
+
+          {currentUser ? (
+            <button
+              type="button"
+              className="nav-link"
+              onClick={() => handleNavAction(onMyListingsClick)}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 11l3 3L22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              <span>My Listings</span>
+            </button>
+          ) : null}
+
+          {currentUser ? (
+            <button
+              type="button"
+              className="nav-link nav-mobile-only"
+              onClick={() => handleNavAction(onProfileClick)}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span>Profile</span>
+            </button>
+          ) : null}
 
           <button
             type="button"
@@ -121,14 +150,31 @@ function Navbar({
           </button>
 
           {currentUser ? (
-            <div className="nav-user-chip" aria-label={`Signed in as ${currentUser.name}`}>
+            <button
+              type="button"
+              className="nav-user-chip"
+              aria-label={`Open profile for ${currentUser.name}`}
+              onClick={() => handleNavAction(onProfileClick)}
+            >
               <span className="nav-user-avatar">{userInitials}</span>
               <span className="nav-user-copy">
                 <strong>{currentUser.name}</strong>
                 <small>Student account</small>
               </span>
-            </div>
-          ) : null}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="nav-user-chip nav-signin-chip"
+              onClick={() => handleNavAction(onSignInClick)}
+            >
+              <span className="nav-user-avatar">IN</span>
+              <span className="nav-user-copy">
+                <strong>Sign In</strong>
+                <small>Access messages and selling</small>
+              </span>
+            </button>
+          )}
 
           {currentUser ? (
             <button

@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import ProductCard from "./ProductCard";
 
-function ProductList({ products, savedItems, onSaveToggle, onViewDetails }) {
+function ProductList({
+  products,
+  savedItems,
+  onSaveToggle,
+  onViewDetails,
+  onQuickChat,
+}) {
   const listRef = useRef(null);
   const [columnCount, setColumnCount] = useState(1);
   const [visibleRows, setVisibleRows] = useState(3);
@@ -61,6 +67,7 @@ function ProductList({ products, savedItems, onSaveToggle, onViewDetails }) {
             isSaved={savedItems.includes(product.id)}
             onSaveToggle={onSaveToggle}
             onViewDetails={onViewDetails}
+            onQuickChat={onQuickChat}
           />
         ))}
       </div>
