@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   validateEmail,
   validatePhone,
@@ -17,7 +17,14 @@ const signupState = {
   password: "",
 };
 
-function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
+function AuthScreen({
+  mode,
+  onModeChange,
+  onBack,
+  onLogin,
+  onSignup,
+  isSubmitting = false,
+}) {
   const [loginForm, setLoginForm] = useState(loginState);
   const [signupForm, setSignupForm] = useState(signupState);
   const [errors, setErrors] = useState({});
@@ -25,12 +32,6 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
   const [showPassword, setShowPassword] = useState(false);
 
   const isLogin = mode === "login";
-
-  useEffect(() => {
-    setErrors({});
-    setSubmitMessage("");
-    setShowPassword(false);
-  }, [mode]);
 
   const validateLoginForm = (values) => ({
     email: validateEmail(values.email),
@@ -58,7 +59,7 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
     setSubmitMessage("");
   };
 
-  const handleLoginSubmit = (event) => {
+  const handleLoginSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = validateLoginForm(loginForm);
     setErrors(nextErrors);
@@ -68,7 +69,7 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
       return;
     }
 
-    const result = onLogin?.(loginForm);
+    const result = await onLogin?.(loginForm);
 
     if (result?.ok) {
       setLoginForm(loginState);
@@ -78,7 +79,7 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
     setSubmitMessage(result?.message ?? "We could not sign you in with those details.");
   };
 
-  const handleSignupSubmit = (event) => {
+  const handleSignupSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = validateSignupForm(signupForm);
     setErrors(nextErrors);
@@ -88,7 +89,7 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
       return;
     }
 
-    const result = onSignup?.(signupForm);
+    const result = await onSignup?.(signupForm);
 
     if (result?.ok) {
       setSignupForm(signupState);
@@ -273,13 +274,13 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
                   }
                 />
 
-                <button type="submit" className="auth-submit-btn">
+                <button type="submit" className="auth-submit-btn" disabled={isSubmitting}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
                     <polyline points="10 17 15 12 10 7"/>
                     <line x1="15" y1="12" x2="3" y2="12"/>
                   </svg>
-                  Sign in
+                  {isSubmitting ? "Signing in..." : "Sign in"}
                 </button>
 
                 <button type="button" className="forgot-password">
@@ -369,14 +370,14 @@ function AuthScreen({ mode, onModeChange, onBack, onLogin, onSignup }) {
                   }
                 />
 
-                <button type="submit" className="auth-submit-btn">
+                <button type="submit" className="auth-submit-btn" disabled={isSubmitting}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                     <circle cx="8.5" cy="7" r="4"/>
                     <line x1="20" y1="8" x2="20" y2="14"/>
                     <line x1="23" y1="11" x2="17" y2="11"/>
                   </svg>
-                  Create account
+                  {isSubmitting ? "Creating account..." : "Create account"}
                 </button>
 
                 <p className="terms-text">

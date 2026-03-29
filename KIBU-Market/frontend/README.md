@@ -1,18 +1,40 @@
-# React + Vite
+# Kibu Market Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This frontend now expects a real backend API for products, authentication, messages, and uploads.
 
-Currently, two official plugins are available:
+## Environment
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Create a `.env` file from `.env.example`:
 
-## React Compiler
+```bash
+VITE_API_BASE_URL=http://localhost:4000/api
+```
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+## Expected API surface
 
-Note: This will impact Vite dev & build performances.
+- `POST /auth/login`
+- `POST /auth/signup`
+- `GET /auth/me`
+- `PATCH /users/me`
+- `GET /products`
+- `POST /products`
+- `PATCH /products/:id`
+- `DELETE /products/:id`
+- `GET /threads`
+- `POST /threads`
+- `POST /threads/:id/messages`
+- `POST /uploads`
 
-## Expanding the ESLint configuration
+The client accepts either top-level JSON entities or `{ data: ... }` wrappers, and it normalizes common field aliases such as `imageUrl`, `owner`, `body`, and `createdAt`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Upload contract
+
+`POST /uploads` should accept multipart form data with a `file` field and return a URL in one of these shapes:
+
+```json
+{ "url": "https://cdn.example.com/file.jpg" }
+```
+
+```json
+{ "data": { "url": "https://cdn.example.com/file.jpg" } }
+```

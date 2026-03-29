@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   hasValidationErrors,
   validatePrice,
@@ -15,10 +15,11 @@ const initialFormState = {
   tags: "",
 };
 
-function SellItemForm({ onAddItem, onBack, currentUser }) {
+function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) {
   const [formData, setFormData] = useState(initialFormState);
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState("");
+  const [imageFile, setImageFile] = useState(null);
 
   const validateForm = (values) => ({
     title: validateRequiredText(values.title, "Item title", 3),
@@ -53,22 +54,35 @@ function SellItemForm({ onAddItem, onBack, currentUser }) {
     }));
   };
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const handleImageChange = (event) => {
     const file = event.target.files?.[0];
 
     if (!file) {
+      if (imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
       setImagePreview("");
+      setImageFile(null);
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImagePreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    if (imagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = validateForm(formData);
 
@@ -85,9 +99,6 @@ function SellItemForm({ onAddItem, onBack, currentUser }) {
       listingState: formData.listingState,
       location: formData.location.trim(),
       description: formData.description.trim(),
-      image:
-        imagePreview ||
-        "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80",
       tags: formData.tags
         .split(",")
         .map((tag) => tag.trim().toLowerCase())
@@ -98,19 +109,19 @@ function SellItemForm({ onAddItem, onBack, currentUser }) {
         status: "just posted",
         phone: currentUser.phone,
       },
-      messages: [
-        {
-          id: `seed-${Date.now()}`,
-          sender: "seller",
-          text: `Hi, this ${formData.title.trim()} is available. Feel free to ask anything.`,
-          time: "Now",
-        },
-      ],
     };
 
-    onAddItem(newItem);
+    const result = await onAddItem(newItem, imageFile);
+    if (!result?.ok) {
+      return;
+    }
+
     setFormData(initialFormState);
     setErrors({});
+    setImageFile(null);
+    if (imagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreview);
+    }
     setImagePreview("");
   };
 
@@ -251,8 +262,8 @@ function SellItemForm({ onAddItem, onBack, currentUser }) {
             <strong>Tip</strong>
             <span>Clear photos and honest descriptions usually get faster replies.</span>
           </div>
-          <button type="submit" className="primary-btn">
-            Publish listing
+          <button type="submit" className="primary-btn" disabled={isSubmitting}>
+            {isSubmitting ? "Publishing..." : "Publish listing"}
           </button>
         </div>
       </form>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   hasValidationErrors,
   validatePrice,
@@ -14,6 +14,7 @@ function MyListingsScreen({
   onDeleteListing,
   onChangeListingStatus,
   onUpdateListing,
+  pendingActionId = null,
 }) {
   const ownedListings = products.filter(
     (product) => product.seller?.id === currentUser?.id,
@@ -27,17 +28,7 @@ function MyListingsScreen({
     image: "",
   });
   const [editErrors, setEditErrors] = useState({});
-
-  useEffect(() => {
-    if (!editingId) {
-      return;
-    }
-
-    const activeProduct = ownedListings.find((product) => product.id === editingId);
-    if (!activeProduct) {
-      setEditingId(null);
-    }
-  }, [editingId, ownedListings]);
+  const [editImageFile, setEditImageFile] = useState(null);
 
   const startEditing = (product) => {
     setEditingId(product.id);
@@ -49,9 +40,13 @@ function MyListingsScreen({
       image: product.image,
     });
     setEditErrors({});
+    setEditImageFile(null);
   };
 
   const cancelEditing = () => {
+    if (editForm.image.startsWith("blob:")) {
+      URL.revokeObjectURL(editForm.image);
+    }
     setEditingId(null);
     setEditForm({
       title: "",
@@ -61,6 +56,7 @@ function MyListingsScreen({
       image: "",
     });
     setEditErrors({});
+    setEditImageFile(null);
   };
 
   const validateEditForm = (values) => ({
@@ -89,18 +85,14 @@ function MyListingsScreen({
     if (!file) {
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEditForm((current) => ({
-        ...current,
-        image: reader.result,
-      }));
-    };
-    reader.readAsDataURL(file);
+    setEditImageFile(file);
+    setEditForm((current) => ({
+      ...current,
+      image: URL.createObjectURL(file),
+    }));
   };
 
-  const handleSaveEdit = (productId) => {
+  const handleSaveEdit = async (productId) => {
     const nextErrors = validateEditForm(editForm);
 
     setEditErrors(nextErrors);
@@ -109,14 +101,20 @@ function MyListingsScreen({
       return;
     }
 
-    onUpdateListing(productId, {
-      title: editForm.title.trim(),
-      price: Number(editForm.price),
-      description: editForm.description.trim(),
-      listingState: editForm.listingState,
-      image: editForm.image,
-    });
-    cancelEditing();
+    const result = await onUpdateListing(
+      productId,
+      {
+        title: editForm.title.trim(),
+        price: Number(editForm.price),
+        description: editForm.description.trim(),
+        listingState: editForm.listingState,
+        image: editForm.image,
+      },
+      editImageFile,
+    );
+    if (result?.ok) {
+      cancelEditing();
+    }
   };
 
   const getListingStatusLabel = (listingState) => {
@@ -131,6 +129,8 @@ function MyListingsScreen({
         return "Active";
     }
   };
+
+  const isPending = (productId, action) => pendingActionId === `${productId}:${action}`;
 
   return (
     <section className="my-listings-screen">
@@ -255,8 +255,9 @@ function MyListingsScreen({
                         type="button"
                         className="primary-btn"
                         onClick={() => handleSaveEdit(product.id)}
+                        disabled={isPending(product.id, "update")}
                       >
-                        Save changes
+                        {isPending(product.id, "update") ? "Saving..." : "Save changes"}
                       </button>
                       <button
                         type="button"
@@ -286,6 +287,7 @@ function MyListingsScreen({
                         type="button"
                         className="secondary-btn"
                         onClick={() => onChangeListingStatus(product.id, "draft")}
+                        disabled={isPending(product.id, "status")}
                       >
                         Draft
                       </button>
@@ -293,6 +295,7 @@ function MyListingsScreen({
                         type="button"
                         className="secondary-btn"
                         onClick={() => onChangeListingStatus(product.id, "paused")}
+                        disabled={isPending(product.id, "status")}
                       >
                         Pause
                       </button>
@@ -300,6 +303,7 @@ function MyListingsScreen({
                         type="button"
                         className="secondary-btn"
                         onClick={() => onChangeListingStatus(product.id, "active")}
+                        disabled={isPending(product.id, "status")}
                       >
                         Activate
                       </button>
@@ -307,6 +311,7 @@ function MyListingsScreen({
                         type="button"
                         className="secondary-btn"
                         onClick={() => onChangeListingStatus(product.id, "sold")}
+                        disabled={isPending(product.id, "status")}
                       >
                         Mark sold
                       </button>
@@ -314,8 +319,9 @@ function MyListingsScreen({
                         type="button"
                         className="danger-btn"
                         onClick={() => onDeleteListing(product.id)}
+                        disabled={isPending(product.id, "delete")}
                       >
-                        Delete
+                        {isPending(product.id, "delete") ? "Deleting..." : "Delete"}
                       </button>
                     </>
                   )}

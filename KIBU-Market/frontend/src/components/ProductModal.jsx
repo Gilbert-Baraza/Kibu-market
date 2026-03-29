@@ -20,10 +20,7 @@ function ProductModal({
     () => (product.gallery?.length ? product.gallery : [product.image]),
     [product],
   );
-  const sellerListings = useMemo(
-    () => products.filter((item) => item.seller?.id === product.seller?.id),
-    [product.seller?.id, products],
-  );
+  const sellerListings = products.filter((item) => item.seller?.id === product.seller?.id);
   const activeSellerListings = sellerListings.filter(
     (item) => item.listingState !== "sold",
   );
@@ -56,18 +53,13 @@ function ProductModal({
     soldCount: soldSellerListings.length,
     responseRate: `${sellerResponseRate}%`,
   };
-  const relatedProducts = useMemo(
-    () =>
-      products
-        .filter(
-          (item) =>
-            item.id !== product.id &&
-            (item.category === product.category ||
-              item.location === product.location),
-        )
-        .slice(0, 3),
-    [product, products],
-  );
+  const relatedProducts = products
+    .filter(
+      (item) =>
+        item.id !== product.id &&
+        (item.category === product.category || item.location === product.location),
+    )
+    .slice(0, 3);
   const getListingStatusLabel = (listingState) => {
     switch (listingState) {
       case "draft":
@@ -108,12 +100,6 @@ function ProductModal({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
-
-  useEffect(() => {
-    setActiveImage(galleryImages[0]);
-    setShareMessage("");
-    setIsSellerExpanded(false);
-  }, [galleryImages, product]);
 
   const handleShare = async () => {
     const shareText = `${product.title} - KES ${product.price.toLocaleString()} at ${product.location}`;
@@ -202,14 +188,14 @@ function ProductModal({
           </div>
 
           <div className="modal-meta-grid">
-            <div>
+           {/*  <div>
               <strong>Seller response</strong>
               <span>Usually replies within a day</span>
-            </div>
-            <div>
+            </div> */}
+            {/* <div>
               <strong>Meetup point</strong>
               <span>{product.location}</span>
-            </div>
+            </div> */}
             <div>
               <strong>Payment</strong>
               <span>M-Pesa or cash on meetup</span>

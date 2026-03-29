@@ -1,263 +1,583 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import ChatConversation from "./ChatConversation";
 
-function MessagesScreen({ products, currentUser, onBack, initialThreadId = null }) {
-  const [activeInbox, setActiveInbox] = useState("buyer");
+const MESSENGER_THEME_STORAGE_KEY = "kibu-market-messenger-theme";
+const MOBILE_BREAKPOINT = 720;
+
+function getStoredMessengerTheme() {
+  try {
+    const value = window.localStorage.getItem(MESSENGER_THEME_STORAGE_KEY);
+    return value === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function getConversationRole(thread, currentUser) {
+  if (!currentUser) {
+    return "buying";
+  }
+
+  return String(thread.sellerId) === String(currentUser.id) ? "selling" : "buying";
+}
+
+function getRoleBadgeLabel(role) {
+  return role === "selling" ? "Selling" : "Buying";
+}
+
+function getRoleContextLabel(role) {
+  return role === "selling" ? "You are selling this item" : "You are buying this item";
+}
+
+function getOtherParticipantName(thread, role) {
+  return role === "selling" ? thread.buyerName : thread.sellerName;
+}
+
+function getOtherParticipantId(thread, role) {
+  return role === "selling" ? thread.buyerId : thread.sellerId;
+}
+
+function getEmptyStateCopy(activeFilter, hasSearch) {
+  if (hasSearch) {
+    return {
+      label: "No matches",
+      title: "No conversations found.",
+      description: "Try a different product name or participant search.",
+    };
+  }
+
+  if (activeFilter === "buying") {
+    return {
+      label: "No buying chats",
+      title: "You are not buying anything yet.",
+      description: "When you message a seller, those conversations will appear here.",
+    };
+  }
+
+  if (activeFilter === "selling") {
+    return {
+      label: "No selling chats",
+      title: "You are not selling anything yet.",
+      description: "Buyer conversations for your listings will show up here.",
+    };
+  }
+
+  return {
+    label: "No messages",
+    title: "You have no messages yet.",
+    description: "Start a conversation from any listing and it will appear in this inbox.",
+  };
+}
+
+function getThreadUnreadCount(thread, role) {
+  if (!thread?.id) {
+    return 0;
+  }
+
+  if (thread.unreadCounts) {
+    return role === "selling"
+      ? Number(thread.unreadCounts.seller ?? 0)
+      : Number(thread.unreadCounts.buyer ?? 0);
+  }
+
+  return Number(thread.unreadCount ?? 0);
+}
+
+function getPresenceLabel(thread, isOnline) {
+  if (isOnline) {
+    return "online";
+  }
+
+  return thread.productStatus === "sold" ? "Listing sold" : "offline";
+}
+
+function MessagesScreen({
+  products,
+  threads,
+  currentUser,
+  onBack,
+  onSendMessage,
+  onMarkThreadRead,
+  onJoinConversation,
+  onLeaveConversation,
+  onTypingStart,
+  onTypingStop,
+  typingByConversation = {},
+  onlineUserIds = [],
+  initialProductId = null,
+  isSending = false,
+}) {
+  const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [draftMessage, setDraftMessage] = useState("");
-  const [selectedThreadId, setSelectedThreadId] = useState(initialThreadId);
-  const [readThreadIds, setReadThreadIds] = useState([]);
-  const [threadMap, setThreadMap] = useState(() =>
-    Object.fromEntries(
-      products.map((product) => [product.id, product.messages ?? []]),
-    ),
-  );
+  const [selectedKey, setSelectedKey] = useState(initialProductId ? `product-${initialProductId}` : null);
+  const [messengerTheme, setMessengerTheme] = useState(getStoredMessengerTheme);
+  const [isMobileLayout, setIsMobileLayout] = useState(() => window.innerWidth <= MOBILE_BREAKPOINT);
+  const [showMobileChat, setShowMobileChat] = useState(Boolean(initialProductId));
   const threadRef = useRef(null);
+  const pendingReadThreadIdRef = useRef(null);
+  const typingConversationIdRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    setThreadMap((currentThreads) => {
-      const nextThreads = { ...currentThreads };
-
-      products.forEach((product) => {
-        if (!nextThreads[product.id]) {
-          nextThreads[product.id] = product.messages ?? [];
-        }
-      });
-
-      return nextThreads;
-    });
-  }, [products]);
-
-  const allThreads = useMemo(
-    () =>
-      products
-        .filter((product) => (threadMap[product.id]?.length ?? 0) > 0)
-        .map((product) => ({
-          ...product,
-          threadMessages: threadMap[product.id] ?? [],
-        })),
-    [products, threadMap],
-  );
-
-  const buyerThreads = useMemo(
-    () =>
-      allThreads.filter((product) =>
-        currentUser ? product.seller?.id !== currentUser.id : true,
-      ),
-    [allThreads, currentUser],
-  );
-  const sellerThreads = useMemo(
-    () =>
-      currentUser
-        ? allThreads.filter((product) => product.seller?.id === currentUser.id)
-        : [],
-    [allThreads, currentUser],
-  );
-
-  const currentInboxThreads = activeInbox === "seller" ? sellerThreads : buyerThreads;
-  const filteredThreads = currentInboxThreads.filter((product) => {
-    const haystack = [
-      product.title,
-      product.seller.name,
-      product.location,
-      product.threadMessages[product.threadMessages.length - 1]?.text ?? "",
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    return haystack.includes(searchQuery.trim().toLowerCase());
-  });
+    try {
+      window.localStorage.setItem(MESSENGER_THEME_STORAGE_KEY, messengerTheme);
+    } catch {
+      // ignore storage issues and keep the in-memory theme
+    }
+  }, [messengerTheme]);
 
   useEffect(() => {
-    const preferredThread =
-      filteredThreads.find((product) => product.id === initialThreadId) ??
-      filteredThreads.find((product) => product.id === selectedThreadId) ??
-      filteredThreads[0] ??
-      null;
+    const handleResize = () => {
+      const mobile = window.innerWidth <= MOBILE_BREAKPOINT;
+      setIsMobileLayout(mobile);
+      if (!mobile) {
+        setShowMobileChat(false);
+      }
+    };
 
-    setSelectedThreadId(preferredThread?.id ?? null);
-    setDraftMessage("");
-  }, [filteredThreads, initialThreadId, selectedThreadId]);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-  useEffect(() => {
-    if (!selectedThreadId) {
-      return;
+  const productMap = useMemo(
+    () => Object.fromEntries(products.map((product) => [String(product.id), product])),
+    [products],
+  );
+
+  const onlineSet = useMemo(() => new Set(onlineUserIds.map(String)), [onlineUserIds]);
+
+  const availableThreads = useMemo(
+    () =>
+      threads
+        .map((thread) => {
+          const product = thread.product ?? productMap[String(thread.productId)] ?? null;
+          if (!product) {
+            return null;
+          }
+
+          const role = getConversationRole(thread, currentUser);
+          const otherParticipantId = getOtherParticipantId(thread, role);
+          const isOtherParticipantOnline = onlineSet.has(String(otherParticipantId));
+
+          return {
+            ...thread,
+            key: `thread-${thread.id}`,
+            product,
+            role,
+            roleLabel: getRoleBadgeLabel(role),
+            roleContextLabel: getRoleContextLabel(role),
+            otherParticipantName: getOtherParticipantName(thread, role),
+            otherParticipantId,
+            isOtherParticipantOnline,
+            presenceLabel: getPresenceLabel(thread, isOtherParticipantOnline),
+          };
+        })
+        .filter(Boolean),
+    [currentUser, onlineSet, productMap, threads],
+  );
+
+  const initialProductThread = useMemo(() => {
+    if (!initialProductId) {
+      return null;
     }
 
-    setReadThreadIds((currentIds) =>
-      currentIds.includes(selectedThreadId)
-        ? currentIds
-        : [...currentIds, selectedThreadId],
+    const existingThread = availableThreads.find(
+      (thread) => String(thread.product.id) === String(initialProductId),
     );
-  }, [selectedThreadId]);
-
-  const getUnreadCount = (product, inbox) => {
-    if (readThreadIds.includes(product.id)) {
-      return 0;
+    if (existingThread) {
+      return existingThread;
     }
 
-    const incomingSender = inbox === "seller" ? "buyer" : "seller";
-    return (product.threadMessages ?? []).filter(
-      (message) => message.sender === incomingSender,
-    ).length;
-  };
+    const product = productMap[String(initialProductId)];
+    if (!product) {
+      return null;
+    }
 
-  const buyerUnreadCount = buyerThreads.reduce(
-    (count, product) => count + getUnreadCount(product, "buyer"),
-    0,
-  );
-  const sellerUnreadCount = sellerThreads.reduce(
-    (count, product) => count + getUnreadCount(product, "seller"),
-    0,
-  );
+    return {
+      id: null,
+      key: `product-${product.id}`,
+      productId: product.id,
+      buyerId: currentUser?.id ?? "",
+      sellerId: product.seller?.id ?? "",
+      buyerName: currentUser?.name ?? "You",
+      sellerName: product.seller?.name ?? "Campus Seller",
+      unreadCount: 0,
+      unreadCounts: { buyer: 0, seller: 0 },
+      messages: [],
+      updatedAt: null,
+      productStatus: product.listingState ?? "active",
+      product,
+      role: "buying",
+      roleLabel: "Buying",
+      roleContextLabel: "You are buying this item",
+      otherParticipantName: product.seller?.name ?? "Campus Seller",
+      otherParticipantId: product.seller?.id ?? "",
+      isOtherParticipantOnline: onlineSet.has(String(product.seller?.id ?? "")),
+      presenceLabel: onlineSet.has(String(product.seller?.id ?? "")) ? "online" : "Ready to chat",
+    };
+  }, [availableThreads, currentUser?.id, currentUser?.name, initialProductId, onlineSet, productMap]);
 
-  const selectedProduct =
-    filteredThreads.find((product) => product.id === selectedThreadId) ?? null;
-  const selectedMessages = selectedProduct
-    ? threadMap[selectedProduct.id] ?? []
-    : [];
+  const allThreads = useMemo(() => {
+    if (!initialProductThread) {
+      return availableThreads;
+    }
 
-  const handleSelectThread = (product) => {
-    setSelectedThreadId(product.id);
-    setDraftMessage("");
-  };
+    const alreadyIncluded = availableThreads.some(
+      (thread) => thread.key === initialProductThread.key,
+    );
+    return alreadyIncluded ? availableThreads : [initialProductThread, ...availableThreads];
+  }, [availableThreads, initialProductThread]);
 
-  const handleSendMessage = () => {
-    const trimmedMessage = draftMessage.trim();
-    if (!trimmedMessage || !selectedProduct) {
+  const filteredThreads = useMemo(() => {
+    const normalizedSearch = searchQuery.trim().toLowerCase();
+
+    return allThreads.filter((thread) => {
+      const matchesFilter =
+        activeFilter === "all" ||
+        (activeFilter === "buying" && thread.role === "buying") ||
+        (activeFilter === "selling" && thread.role === "selling");
+
+      if (!matchesFilter) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [
+        thread.product.title,
+        thread.otherParticipantName,
+        thread.lastMessage,
+        thread.messages[thread.messages.length - 1]?.text ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [activeFilter, allThreads, searchQuery]);
+
+  const selectedThread =
+    filteredThreads.find((thread) => thread.key === selectedKey) ??
+    filteredThreads.find((thread) => String(thread.product.id) === String(initialProductId)) ??
+    filteredThreads[0] ??
+    null;
+
+  useEffect(() => {
+    if (!selectedThread?.id || !onMarkThreadRead) {
+      pendingReadThreadIdRef.current = null;
       return;
     }
 
-    const sender = activeInbox === "seller" ? "seller" : "buyer";
-    setThreadMap((currentThreads) => ({
-      ...currentThreads,
-      [selectedProduct.id]: [
-        ...(currentThreads[selectedProduct.id] ?? []),
-        {
-          id: `inbox-${Date.now()}`,
-          sender,
-          text: trimmedMessage,
-          time: "Now",
-        },
-      ],
-    }));
-    setDraftMessage("");
+    const unreadCount = getThreadUnreadCount(selectedThread, selectedThread.role);
+    if (unreadCount <= 0 || pendingReadThreadIdRef.current === selectedThread.id) {
+      return;
+    }
+
+    pendingReadThreadIdRef.current = selectedThread.id;
+
+    Promise.resolve(onMarkThreadRead(selectedThread.id)).finally(() => {
+      if (pendingReadThreadIdRef.current === selectedThread.id) {
+        pendingReadThreadIdRef.current = null;
+      }
+    });
+  }, [onMarkThreadRead, selectedThread]);
+
+  useEffect(() => {
+    if (!selectedThread?.id || !onJoinConversation) {
+      return undefined;
+    }
+
+    const shouldJoin = !isMobileLayout || showMobileChat;
+    if (!shouldJoin) {
+      return undefined;
+    }
+
+    onJoinConversation(selectedThread.id);
+
+    return () => {
+      onLeaveConversation?.(selectedThread.id);
+    };
+  }, [isMobileLayout, onJoinConversation, onLeaveConversation, selectedThread?.id, showMobileChat]);
+
+  useEffect(() => () => {
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+
+    if (typingConversationIdRef.current) {
+      onTypingStop?.(typingConversationIdRef.current);
+    }
+  }, [onTypingStop]);
+
+  const unreadCounts = {
+    all: allThreads.reduce(
+      (count, thread) => count + getThreadUnreadCount(thread, thread.role),
+      0,
+    ),
+    buying: allThreads
+      .filter((thread) => thread.role === "buying")
+      .reduce((count, thread) => count + getThreadUnreadCount(thread, thread.role), 0),
+    selling: allThreads
+      .filter((thread) => thread.role === "selling")
+      .reduce((count, thread) => count + getThreadUnreadCount(thread, thread.role), 0),
   };
+
+  const stopTypingForConversation = (conversationId) => {
+    if (!conversationId || typingConversationIdRef.current !== conversationId) {
+      return;
+    }
+
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+
+    typingConversationIdRef.current = null;
+    onTypingStop?.(conversationId);
+  };
+
+  const handleDraftChange = (value) => {
+    setDraftMessage(value);
+
+    if (!selectedThread?.id) {
+      return;
+    }
+
+    if (!value.trim()) {
+      stopTypingForConversation(selectedThread.id);
+      return;
+    }
+
+    if (typingConversationIdRef.current !== selectedThread.id) {
+      typingConversationIdRef.current = selectedThread.id;
+      onTypingStart?.(selectedThread.id);
+    }
+
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = window.setTimeout(() => {
+      stopTypingForConversation(selectedThread.id);
+    }, 1200);
+  };
+
+  const handleSend = async () => {
+    const trimmedMessage = draftMessage.trim();
+    if (!trimmedMessage || !selectedThread) {
+      return;
+    }
+
+    const recipientId = selectedThread.role === "selling"
+      ? selectedThread.buyerId
+      : selectedThread.sellerId;
+
+    const result = await onSendMessage({
+      threadId: selectedThread.id,
+      productId: selectedThread.product.id,
+      recipientId,
+      text: trimmedMessage,
+    });
+
+    if (result?.ok) {
+      stopTypingForConversation(selectedThread.id);
+      setDraftMessage("");
+      if (result.thread?.id) {
+        setSelectedKey(`thread-${result.thread.id}`);
+      }
+    }
+  };
+
+  const emptyState = getEmptyStateCopy(activeFilter, Boolean(searchQuery.trim()));
+  const showThreadList = !isMobileLayout || !showMobileChat;
+  const showChatPanel = !isMobileLayout || showMobileChat;
+  const activeTypingState = selectedThread?.id ? typingByConversation[selectedThread.id] : null;
 
   return (
-    <section className="messages-screen">
-      <div className="messages-header">
-        <div>
-          <span className="section-label">Messages</span>
-          <h2>Your conversations</h2>
-        </div>
-        <button type="button" className="secondary-btn" onClick={onBack}>
-          Back to marketplace
-        </button>
-      </div>
-
-      <div className="messages-toolbar">
-        <div className="messages-tabs" role="tablist" aria-label="Inbox type">
-          <button
-            type="button"
-            className={activeInbox === "buyer" ? "filter-chip active" : "filter-chip"}
-            onClick={() => setActiveInbox("buyer")}
-          >
-            Buyer inbox
-            {buyerUnreadCount > 0 ? (
-              <span className="inbox-badge">{buyerUnreadCount}</span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            className={activeInbox === "seller" ? "filter-chip active" : "filter-chip"}
-            onClick={() => setActiveInbox("seller")}
-          >
-            Seller inbox
-            {sellerUnreadCount > 0 ? (
-              <span className="inbox-badge">{sellerUnreadCount}</span>
-            ) : null}
-          </button>
-        </div>
-
-        <label className="messages-search">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by item, seller, or message"
-          />
-        </label>
-      </div>
-
-      <div className="messages-layout">
-        <aside className="messages-sidebar">
-          {filteredThreads.map((product) => {
-            const lastMessage =
-              product.threadMessages[product.threadMessages.length - 1] ?? null;
-            const unreadCount = getUnreadCount(product, activeInbox);
-
-            return (
-              <button
-                key={product.id}
-                type="button"
-                className={
-                  product.id === selectedThreadId
-                    ? "message-thread-card active"
-                    : "message-thread-card"
-                }
-                onClick={() => handleSelectThread(product)}
-              >
-                <img src={product.image} alt={product.title} className="message-thread-image" />
-                <div className="message-thread-copy">
-                  <div className="message-thread-heading">
-                    <strong>{product.title}</strong>
-                    <span className="message-thread-time">
-                      {lastMessage?.time ?? ""}
-                    </span>
-                  </div>
-                  <span>{product.seller.name}</span>
-                  <div className="message-thread-preview">
-                    <p>{lastMessage?.text ?? "No messages yet"}</p>
-                    {unreadCount > 0 ? (
-                      <span className="message-unread-badge">{unreadCount}</span>
-                    ) : null}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-
-          {filteredThreads.length === 0 ? (
-            <div className="empty-state">
-              <span className="section-label">No matches</span>
-              <h3>No conversations found.</h3>
-              <p>Try a different search or switch inbox tabs.</p>
+    <section className={`messages-screen messenger-shell messenger-theme-${messengerTheme}`}>
+      <div className="messenger-frame">
+        {showThreadList ? (
+          <aside className="messenger-sidebar">
+            <div className="messenger-sidebar-header">
+              <div>
+                <span className="messenger-kicker">Marketplace chat</span>
+                <h2>Chats</h2>
+              </div>
+              <div className="messenger-header-actions">
+                <button
+                  type="button"
+                  className="messenger-theme-toggle-icon-only"
+                  onClick={() => setMessengerTheme((current) => current === "dark" ? "light" : "dark")}
+                  aria-label={`Switch to ${messengerTheme === "dark" ? "light" : "dark"} chat background`}
+                  title={`Switch to ${messengerTheme === "dark" ? "light" : "dark"} chat background`}
+                >
+                  {messengerTheme === "dark" ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3a6 6 0 1 0 9 9 9 9 0 1 1-9-9z" />
+                    </svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2" />
+                      <path d="M12 20v2" />
+                      <path d="m4.93 4.93 1.41 1.41" />
+                      <path d="m17.66 17.66 1.41 1.41" />
+                      <path d="M2 12h2" />
+                      <path d="M20 12h2" />
+                      <path d="m6.34 17.66-1.41 1.41" />
+                      <path d="m19.07 4.93-1.41 1.41" />
+                    </svg>
+                  )}
+                </button>
+                <button type="button" className="messenger-back-btn" onClick={onBack}>
+                  Back
+                </button>
+              </div>
             </div>
-          ) : null}
-        </aside>
 
-        <div className="messages-chat-panel">
-          {selectedProduct ? (
-            <ChatConversation
-              product={selectedProduct}
-              messages={selectedMessages}
-              draftMessage={draftMessage}
-              onDraftChange={setDraftMessage}
-              onSendMessage={handleSendMessage}
-              onBack={onBack}
-              threadRef={threadRef}
-            />
-          ) : (
-            <div className="empty-state">
-              <span className="section-label">No chats</span>
-              <h3>No conversations yet.</h3>
-              <p>Once you start messaging sellers, your threads will appear here.</p>
+            <label className="messenger-search">
+              <span className="messenger-search-icon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search or start a new conversation"
+              />
+            </label>
+
+            <div className="messenger-filter-row" role="tablist" aria-label="Inbox filter">
+              {[
+                { id: "all", label: "All" },
+                { id: "buying", label: "Buying" },
+                { id: "selling", label: "Selling" },
+              ].map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  className={activeFilter === filter.id ? "messenger-filter active" : "messenger-filter"}
+                  onClick={() => setActiveFilter(filter.id)}
+                >
+                  <span>{filter.label}</span>
+                  {unreadCounts[filter.id] > 0 ? (
+                    <span className="inbox-badge">{unreadCounts[filter.id]}</span>
+                  ) : null}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+
+            <div className="messenger-thread-list">
+              {filteredThreads.length > 0 ? (
+                filteredThreads.map((thread) => {
+                  const lastMessage = thread.messages[thread.messages.length - 1] ?? null;
+                  const unreadCount = getThreadUnreadCount(thread, thread.role);
+
+                  return (
+                    <button
+                      key={thread.key}
+                      type="button"
+                      className={
+                        thread.key === selectedKey
+                          ? "messenger-thread active"
+                          : "messenger-thread"
+                      }
+                      onClick={() => {
+                        setSelectedKey(thread.key);
+                        setDraftMessage("");
+                        if (isMobileLayout) {
+                          setShowMobileChat(true);
+                        }
+                      }}
+                    >
+                      <img
+                        src={thread.product.image}
+                        alt={thread.product.title}
+                        className="messenger-thread-avatar"
+                      />
+                      <div className="messenger-thread-content">
+                        <div className="messenger-thread-line">
+                          <strong>{thread.otherParticipantName}</strong>
+                          <span className="messenger-thread-time">{lastMessage?.time ?? "New"}</span>
+                        </div>
+                        <div className="messenger-thread-line messenger-thread-line-meta">
+                          <span className="messenger-thread-product">
+                            {thread.roleLabel} • {thread.product.title}
+                          </span>
+                          {unreadCount > 0 ? (
+                            <span className="messenger-unread-dot" aria-label={`${unreadCount} unread messages`} />
+                          ) : null}
+                        </div>
+                        <div className="messenger-thread-line messenger-thread-line-preview">
+                          <p>{lastMessage?.text ?? "Start the conversation about this item."}</p>
+                          <span className={thread.productStatus === "sold" ? "messenger-status sold" : "messenger-status"}>
+                            {thread.productStatus === "sold" ? "Sold" : "Active"}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <EmptyInboxState {...emptyState} compact dark={messengerTheme === "dark"} />
+              )}
+            </div>
+          </aside>
+        ) : null}
+
+        {showChatPanel ? (
+          <div className="messenger-chat-wrap">
+            {selectedThread ? (
+              <ChatConversation
+                product={selectedThread.product}
+                messages={selectedThread.messages}
+                draftMessage={draftMessage}
+                onDraftChange={handleDraftChange}
+                onSendMessage={handleSend}
+                onBack={isMobileLayout ? () => setShowMobileChat(false) : onBack}
+                threadRef={threadRef}
+                isSending={isSending}
+                role={selectedThread.role}
+                roleLabel={selectedThread.roleLabel}
+                roleContextLabel={selectedThread.roleContextLabel}
+                otherParticipantName={selectedThread.otherParticipantName}
+                productStatus={selectedThread.productStatus}
+                presenceLabel={selectedThread.presenceLabel}
+                typingLabel={activeTypingState?.userName ?? ""}
+                mobile={isMobileLayout}
+              />
+            ) : (
+              <div className="messenger-chat-panel messenger-chat-empty">
+                <EmptyInboxState {...emptyState} dark={messengerTheme === "dark"} />
+              </div>
+            )}
+          </div>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function EmptyInboxState({ label, title, description, compact = false, dark = false }) {
+  return (
+    <div className={dark
+      ? compact
+        ? "empty-state empty-state-compact empty-state-dark"
+        : "empty-state empty-state-dark"
+      : compact
+        ? "empty-state empty-state-compact"
+        : "empty-state"}
+    >
+      <span className="section-label">{label}</span>
+      <h3>{title}</h3>
+      <p>{description}</p>
+    </div>
   );
 }
 

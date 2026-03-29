@@ -1,30 +1,29 @@
-import { Suspense, lazy, startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
 import SearchBar from "../components/SearchBar";
 import ProductList from "../components/ProductList";
-import initialProducts from "../data/products";
 import MessagesScreen from "../components/MessagesScreen";
 import MyListingsScreen from "../components/MyListingsScreen";
 import UserProfileScreen from "../components/UserProfileScreen";
 import ToastViewport from "../components/ToastViewport";
+import { ApiError, apiClient, normalizeThread, sessionStore } from "../api/client";
+import { useSocket } from "../hooks/useSocket";
 
 const ProductModal = lazy(() => import("../components/ProductModal"));
 const SellItemForm = lazy(() => import("../components/SellItemForm"));
 const AuthScreen = lazy(() => import("../components/AuthScreen"));
 
-const SESSION_STORAGE_KEY = "kibu-market-session-user";
-const USERS_STORAGE_KEY = "kibu-market-users";
-
-const defaultAccount = {
-  id: "campus-seller",
-  name: "Campus Seller",
-  email: "seller@kibu.ac.ke",
-  phone: "0700000000",
-  campus: "Kibabii University",
-  bio: "Student seller sharing useful finds, study essentials, and room upgrades around campus.",
-  password: "campus123",
-};
+const SAVED_ITEMS_STORAGE_KEY = "kibu-market-saved-items";
 
 function readStoredJson(key, fallbackValue) {
   try {
@@ -35,24 +34,160 @@ function readStoredJson(key, fallbackValue) {
   }
 }
 
+function sortProductsByLatest(products) {
+  return [...products].sort((a, b) => {
+    const left = a.createdAt ? new Date(a.createdAt).getTime() : Number(a.id) || 0;
+    const right = b.createdAt ? new Date(b.createdAt).getTime() : Number(b.id) || 0;
+    return right - left;
+  });
+}
+
+function getThreadSortTime(thread) {
+  const lastMessage = thread.messages?.[thread.messages.length - 1];
+  const value = thread.updatedAt ?? lastMessage?.createdAt ?? null;
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortThreadsByLatest(threads) {
+  return [...threads].sort((a, b) => getThreadSortTime(b) - getThreadSortTime(a));
+}
+
+function mergeUniqueMessages(currentMessages = [], incomingMessages = []) {
+  const messageMap = new Map();
+
+  [...currentMessages, ...incomingMessages].forEach((message) => {
+    if (!message?.id) {
+      return;
+    }
+
+    messageMap.set(String(message.id), message);
+  });
+
+  return Array.from(messageMap.values()).sort((left, right) => {
+    const leftTime = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTime = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return leftTime - rightTime;
+  });
+}
+
+function mergeProductsWithThreads(products, threads) {
+  const productMap = new Map(products.map((product) => [String(product.id), { ...product }]));
+
+  threads.forEach((thread) => {
+    if (thread.product && !productMap.has(String(thread.product.id))) {
+      productMap.set(String(thread.product.id), {
+        ...thread.product,
+        messages: [...thread.messages],
+      });
+    }
+
+    const targetProduct = productMap.get(String(thread.productId));
+    if (targetProduct) {
+      if (thread.product) {
+        Object.assign(targetProduct, thread.product);
+      }
+      targetProduct.messages = [...thread.messages];
+    }
+  });
+
+  return Array.from(productMap.values());
+}
+
+function replaceProduct(products, nextProduct) {
+  const nextProducts = products.some((product) => String(product.id) === String(nextProduct.id))
+    ? products.map((product) =>
+        String(product.id) === String(nextProduct.id) ? nextProduct : product,
+      )
+    : [nextProduct, ...products];
+
+  return sortProductsByLatest(nextProducts);
+}
+
+function upsertThread(currentThreads, incomingThread, { messageMode = "preserve" } = {}) {
+  if (!incomingThread?.id) {
+    return currentThreads;
+  }
+
+  const existingThread = currentThreads.find((thread) => thread.id === incomingThread.id);
+  if (!existingThread) {
+    return sortThreadsByLatest([
+      {
+        ...incomingThread,
+        messages: incomingThread.messages ?? [],
+      },
+      ...currentThreads,
+    ]);
+  }
+
+  let nextMessages = existingThread.messages ?? [];
+
+  if (messageMode === "replace") {
+    nextMessages = incomingThread.messages?.length ? incomingThread.messages : existingThread.messages;
+  } else if (messageMode === "append") {
+    nextMessages = mergeUniqueMessages(existingThread.messages, incomingThread.messages);
+  } else {
+    nextMessages = incomingThread.messages?.length
+      ? mergeUniqueMessages(existingThread.messages, incomingThread.messages)
+      : existingThread.messages;
+  }
+
+  const mergedThread = {
+    ...existingThread,
+    ...incomingThread,
+    product: incomingThread.product ?? existingThread.product,
+    messages: nextMessages,
+  };
+
+  return sortThreadsByLatest(
+    currentThreads.map((thread) => (thread.id === mergedThread.id ? mergedThread : thread)),
+  );
+}
+
+function isAbortError(error) {
+  return error?.name === "AbortError" || error?.code === 20;
+}
+
+function getThreadUnreadCountForUser(thread, currentUser) {
+  if (!currentUser || !thread) {
+    return 0;
+  }
+
+  const isSeller = String(thread.sellerId) === String(currentUser.id);
+  if (thread.unreadCounts) {
+    return isSeller
+      ? Number(thread.unreadCounts.seller ?? 0)
+      : Number(thread.unreadCounts.buyer ?? 0);
+  }
+
+  return Number(thread.unreadCount ?? 0);
+}
+
 function Home() {
-  const [products, setProducts] = useState(initialProducts);
+  const [products, setProducts] = useState([]);
+  const [threads, setThreads] = useState([]);
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [sortBy, setSortBy] = useState("latest");
-  const [savedItems, setSavedItems] = useState([]);
+  const [savedItems, setSavedItems] = useState(() =>
+    readStoredJson(SAVED_ITEMS_STORAGE_KEY, []),
+  );
   const [blockedSellerIds, setBlockedSellerIds] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [activePage, setActivePage] = useState("market");
-  const [selectedMessageThreadId, setSelectedMessageThreadId] = useState(null);
+  const [selectedMessageProductId, setSelectedMessageProductId] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [registeredUsers, setRegisteredUsers] = useState(() =>
-    readStoredJson(USERS_STORAGE_KEY, [defaultAccount]),
-  );
-  const [currentUser, setCurrentUser] = useState(() =>
-    readStoredJson(SESSION_STORAGE_KEY, null),
-  );
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [bootstrapError, setBootstrapError] = useState("");
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [isListingSubmitting, setIsListingSubmitting] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState(null);
+  const [isMessageSending, setIsMessageSending] = useState(false);
+  const [onlineUserIds, setOnlineUserIds] = useState([]);
+  const [typingByConversation, setTypingByConversation] = useState({});
   const listingsSectionRef = useRef(null);
+  const socketToken = sessionStore.getToken();
 
   useEffect(() => {
     if (toasts.length === 0) {
@@ -71,20 +206,210 @@ function Home() {
   }, [toasts]);
 
   useEffect(() => {
-    window.localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(registeredUsers));
-  }, [registeredUsers]);
+    window.localStorage.setItem(SAVED_ITEMS_STORAGE_KEY, JSON.stringify(savedItems));
+  }, [savedItems]);
 
   useEffect(() => {
-    if (currentUser) {
-      window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(currentUser));
+    const controller = new AbortController();
+
+    const loadAppData = async () => {
+      setIsBootstrapping(true);
+      setBootstrapError("");
+
+      const token = sessionStore.getToken();
+
+      try {
+        const [fetchedProducts, fetchedUser, fetchedThreads] = await Promise.all([
+          apiClient.getProducts(controller.signal),
+          token
+            ? apiClient.getCurrentUser(controller.signal).catch((error) => {
+                if (error instanceof ApiError && error.status === 401) {
+                  sessionStore.clear();
+                  return null;
+                }
+
+                throw error;
+              })
+            : Promise.resolve(null),
+          token
+            ? apiClient.getThreads(controller.signal).catch((error) => {
+                if (error instanceof ApiError && error.status === 401) {
+                  sessionStore.clear();
+                  return [];
+                }
+
+                throw error;
+              })
+            : Promise.resolve([]),
+        ]);
+
+        setCurrentUser(fetchedUser);
+        setThreads(sortThreadsByLatest(fetchedThreads));
+        setProducts(mergeProductsWithThreads(fetchedProducts, fetchedThreads));
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
+          return;
+        }
+
+        setBootstrapError(
+          error instanceof Error
+            ? error.message
+            : "We could not connect to the marketplace API.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsBootstrapping(false);
+        }
+      }
+    };
+
+    loadAppData();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
+  const showToast = ({ type = "success", title, message }) => {
+    const toast = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      title,
+      message,
+    };
+
+    setToasts((currentToasts) => [...currentToasts, toast]);
+  };
+
+  const applyThreadUpdate = (incomingThread, options) => {
+    if (!incomingThread?.id) {
       return;
     }
 
-    window.localStorage.removeItem(SESSION_STORAGE_KEY);
-  }, [currentUser]);
+    setThreads((currentThreads) => {
+      const nextThreads = upsertThread(currentThreads, incomingThread, options);
+      setProducts((currentProducts) => mergeProductsWithThreads(currentProducts, nextThreads));
+      return nextThreads;
+    });
+  };
+
+  const removeTypingState = (conversationId) => {
+    if (!conversationId) {
+      return;
+    }
+
+    setTypingByConversation((currentState) => {
+      if (!currentState[conversationId]) {
+        return currentState;
+      }
+
+      const nextState = { ...currentState };
+      delete nextState[conversationId];
+      return nextState;
+    });
+  };
+
+  const {
+    isConnected: isSocketConnected,
+    joinConversation,
+    leaveConversation,
+    sendMessage: sendSocketMessage,
+    markConversationRead: markConversationReadSocket,
+    startTyping,
+    stopTyping,
+  } = useSocket({
+    enabled: Boolean(currentUser && socketToken),
+    token: socketToken,
+    onPresenceSync: (payload) => {
+      setOnlineUserIds(Array.isArray(payload?.userIds) ? payload.userIds : []);
+    },
+    onPresenceUpdate: (payload) => {
+      const userId = payload?.userId;
+      if (!userId) {
+        return;
+      }
+
+      setOnlineUserIds((currentIds) => {
+        const normalizedId = String(userId);
+        const hasUser = currentIds.some((id) => String(id) === normalizedId);
+
+        if (payload.isOnline) {
+          return hasUser ? currentIds : [...currentIds, userId];
+        }
+
+        return currentIds.filter((id) => String(id) !== normalizedId);
+      });
+    },
+    onTypingUpdate: (payload) => {
+      const conversationId = payload?.conversationId;
+      if (!conversationId) {
+        return;
+      }
+
+      if (!payload.isTyping) {
+        removeTypingState(conversationId);
+        return;
+      }
+
+      if (String(payload.userId) === String(currentUser?.id)) {
+        return;
+      }
+
+      setTypingByConversation((currentState) => ({
+        ...currentState,
+        [conversationId]: {
+          userId: payload.userId,
+          userName: payload.userName ?? "Someone",
+        },
+      }));
+    },
+    onConversationUpdated: (payload) => {
+      if (!payload?.conversation) {
+        return;
+      }
+
+      applyThreadUpdate(normalizeThread(payload.conversation), { messageMode: "preserve" });
+    },
+    onConversationReadUpdate: (payload) => {
+      if (!payload?.conversation) {
+        return;
+      }
+
+      const nextThread = normalizeThread(payload.conversation);
+      applyThreadUpdate(nextThread, { messageMode: "preserve" });
+      removeTypingState(nextThread.id);
+    },
+    onMessageNew: (payload) => {
+      if (!payload?.conversation) {
+        return;
+      }
+
+      const nextThread = normalizeThread(payload.conversation);
+      applyThreadUpdate(nextThread, { messageMode: "append" });
+      removeTypingState(nextThread.id);
+    },
+    onError: (message) => {
+      showToast({
+        type: "error",
+        title: "Real-time chat error",
+        message,
+      });
+    },
+  });
 
   const deferredQuery = useDeferredValue(query);
-  const categories = ["All", ...new Set(products.map((product) => product.category))];
+  const categories = useMemo(
+    () => ["All", ...new Set(products.map((product) => product.category))],
+    [products],
+  );
+  const unreadMessageCount = useMemo(
+    () =>
+      threads.reduce(
+        (count, thread) => count + getThreadUnreadCountForUser(thread, currentUser),
+        0,
+      ),
+    [currentUser, threads],
+  );
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
   let visibleProducts = products.filter((product) => {
@@ -96,17 +421,10 @@ function Home() {
       return false;
     }
 
-    const matchesCategory =
-      activeCategory === "All" || product.category === activeCategory;
-
+    const matchesCategory = activeCategory === "All" || product.category === activeCategory;
     const matchesQuery =
       normalizedQuery.length === 0 ||
-      [
-        product.title,
-        product.category,
-        product.location,
-        ...(product.tags ?? []),
-      ]
+      [product.title, product.category, product.location, ...(product.tags ?? [])]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
@@ -119,15 +437,19 @@ function Home() {
   } else if (sortBy === "price-high") {
     visibleProducts = [...visibleProducts].sort((a, b) => b.price - a.price);
   } else if (sortBy === "title") {
-    visibleProducts = [...visibleProducts].sort((a, b) =>
-      a.title.localeCompare(b.title),
-    );
+    visibleProducts = [...visibleProducts].sort((a, b) => a.title.localeCompare(b.title));
+  } else {
+    visibleProducts = sortProductsByLatest(visibleProducts);
   }
 
   const handleSearchChange = (nextValue) => {
     startTransition(() => {
       setQuery(nextValue);
     });
+  };
+
+  const dismissToast = (toastId) => {
+    setToasts((currentToasts) => currentToasts.filter((toast) => toast.id !== toastId));
   };
 
   const handleSaveToggle = (productId) => {
@@ -151,21 +473,6 @@ function Home() {
     }
   };
 
-  const showToast = ({ type = "success", title, message }) => {
-    const toast = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type,
-      title,
-      message,
-    };
-
-    setToasts((currentToasts) => [...currentToasts, toast]);
-  };
-
-  const dismissToast = (toastId) => {
-    setToasts((currentToasts) => currentToasts.filter((toast) => toast.id !== toastId));
-  };
-
   const requireSellerSession = (nextPage) => {
     if (currentUser) {
       setSelectedProduct(null);
@@ -178,17 +485,13 @@ function Home() {
     showToast({
       type: "error",
       title: "Sign in required",
-      message: "Please sign in to access seller tools and account pages.",
+      message: "Please sign in to access seller tools, messages, and account pages.",
     });
     return false;
   };
 
   const openSellPage = () => {
     requireSellerSession("sell");
-  };
-
-  const openLoginPage = () => {
-    setActivePage("login");
   };
 
   const openMyListingsPage = () => {
@@ -200,61 +503,107 @@ function Home() {
   };
 
   const openMessagesPage = () => {
+    if (!requireSellerSession("messages")) {
+      return;
+    }
+
     setSelectedProduct(null);
-    setActivePage("messages");
   };
 
   const openMessagesForProduct = (product) => {
-    setSelectedMessageThreadId(product.id);
+    if (!requireSellerSession("messages")) {
+      return;
+    }
+
+    setSelectedMessageProductId(product.id);
     setSelectedProduct(null);
     setActivePage("messages");
   };
 
   const scrollToListings = () => {
+    setSelectedMessageProductId(null);
     setActivePage("market");
     listingsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const handleAddItem = (item) => {
-    const createdId = Date.now();
-    const newProduct = {
-      ...item,
-      id: createdId,
-    };
+  const handleAddItem = async (item, imageFile) => {
+    setIsListingSubmitting(true);
 
-    setProducts((currentProducts) => [newProduct, ...currentProducts]);
-    setActiveCategory("All");
-    setSortBy("latest");
-    setQuery("");
-    setActivePage("market");
-    setSelectedProduct(newProduct);
-    showToast({
-      type: "success",
-      title: "Listing posted",
-      message: `${newProduct.title} is now live in the marketplace.`,
-    });
-    requestAnimationFrame(() => {
-      scrollToListings();
-    });
-  };
+    try {
+      const uploadedImageUrl = imageFile ? await apiClient.uploadFile(imageFile) : "";
+      const createdProduct = await apiClient.createProduct({
+        ...item,
+        image:
+          uploadedImageUrl ||
+          "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80",
+      });
 
-  const handleDeleteListing = (productId) => {
-    const productToDelete = products.find((product) => product.id === productId);
-
-    setProducts((currentProducts) =>
-      currentProducts.filter((product) => product.id !== productId),
-    );
-
-    if (selectedProduct?.id === productId) {
-      setSelectedProduct(null);
-    }
-
-    if (productToDelete) {
+      setProducts((currentProducts) => replaceProduct(currentProducts, createdProduct));
+      setActiveCategory("All");
+      setSortBy("latest");
+      setQuery("");
+      setActivePage("market");
+      setSelectedProduct(createdProduct);
       showToast({
         type: "success",
-        title: "Listing deleted",
-        message: `${productToDelete.title} was removed from your listings.`,
+        title: "Listing posted",
+        message: `${createdProduct.title} is now live in the marketplace.`,
       });
+      requestAnimationFrame(() => {
+        scrollToListings();
+      });
+
+      return { ok: true };
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Listing failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not publish your listing right now.",
+      });
+      return { ok: false };
+    } finally {
+      setIsListingSubmitting(false);
+    }
+  };
+
+  const handleDeleteListing = async (productId) => {
+    const productToDelete = products.find((product) => product.id === productId);
+    setPendingActionId(`${productId}:delete`);
+
+    try {
+      await apiClient.deleteProduct(productId);
+      setProducts((currentProducts) =>
+        currentProducts.filter((product) => product.id !== productId),
+      );
+      setThreads((currentThreads) =>
+        currentThreads.filter((thread) => String(thread.productId) !== String(productId)),
+      );
+
+      if (selectedProduct?.id === productId) {
+        setSelectedProduct(null);
+      }
+
+      if (productToDelete) {
+        showToast({
+          type: "success",
+          title: "Listing deleted",
+          message: `${productToDelete.title} was removed from your listings.`,
+        });
+      }
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Delete failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not delete that listing right now.",
+      });
+    } finally {
+      setPendingActionId(null);
     }
   };
 
@@ -271,179 +620,206 @@ function Home() {
     }
   };
 
-  const handleChangeListingStatus = (productId, nextStatus) => {
+  const handleChangeListingStatus = async (productId, nextStatus) => {
     const targetProduct = products.find((product) => product.id === productId);
-
     if (!targetProduct || targetProduct.listingState === nextStatus) {
       return;
     }
 
-    setProducts((currentProducts) =>
-      currentProducts.map((product) =>
-        product.id === productId
-          ? {
-              ...product,
-              listingState: nextStatus,
-            }
-          : product,
-      ),
-    );
+    setPendingActionId(`${productId}:status`);
 
-    if (targetProduct) {
+    try {
+      const updatedProduct = await apiClient.updateProduct(productId, {
+        listingState: nextStatus,
+      });
+
+      setProducts((currentProducts) => replaceProduct(currentProducts, updatedProduct));
+
       showToast({
         type: "success",
         title: `Listing moved to ${getListingStatusLabel(nextStatus).toLowerCase()}`,
-        message: `${targetProduct.title} is now ${getListingStatusLabel(nextStatus).toLowerCase()}.`,
+        message: `${updatedProduct.title} is now ${getListingStatusLabel(nextStatus).toLowerCase()}.`,
       });
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Status update failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not update the listing status.",
+      });
+    } finally {
+      setPendingActionId(null);
     }
   };
 
-  const handleUpdateListing = (productId, updates) => {
-    const targetProduct = products.find((product) => product.id === productId);
+  const handleUpdateListing = async (productId, updates, imageFile) => {
+    setPendingActionId(`${productId}:update`);
 
-    setProducts((currentProducts) =>
-      currentProducts.map((product) =>
-        product.id === productId
-          ? {
-              ...product,
-              ...updates,
-            }
-          : product,
-      ),
-    );
+    try {
+      const uploadedImageUrl = imageFile ? await apiClient.uploadFile(imageFile) : "";
+      const updatedProduct = await apiClient.updateProduct(productId, {
+        ...updates,
+        ...(uploadedImageUrl ? { image: uploadedImageUrl } : {}),
+      });
 
-    if (selectedProduct?.id === productId) {
-      setSelectedProduct((currentProduct) =>
-        currentProduct
-          ? {
-              ...currentProduct,
-              ...updates,
-            }
-          : currentProduct,
-      );
-    }
+      setProducts((currentProducts) => replaceProduct(currentProducts, updatedProduct));
 
-    if (targetProduct) {
+      if (selectedProduct?.id === productId) {
+        setSelectedProduct(updatedProduct);
+      }
+
       showToast({
         type: "success",
         title: "Listing updated",
-        message: `${updates.title ?? targetProduct.title} was updated successfully.`,
+        message: `${updatedProduct.title} was updated successfully.`,
       });
+      return { ok: true };
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Update failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not update that listing right now.",
+      });
+      return { ok: false };
+    } finally {
+      setPendingActionId(null);
     }
   };
 
-  const handleUpdateProfile = (nextProfile) => {
+  const handleUpdateProfile = async (nextProfile) => {
     if (!currentUser) {
       return;
     }
 
-    const updatedUser = {
-      ...currentUser,
-      ...nextProfile,
-    };
-
-    setCurrentUser(updatedUser);
-    setRegisteredUsers((currentAccounts) =>
-      currentAccounts.map((account) =>
-        account.id === currentUser.id
-          ? {
-              ...account,
-              ...updatedUser,
-            }
-          : account,
-      ),
-    );
-    setProducts((currentProducts) =>
-      currentProducts.map((product) =>
-        product.seller?.id === currentUser.id
-          ? {
-              ...product,
-              seller: {
-                ...product.seller,
-                id: updatedUser.id,
-                name: updatedUser.name,
-                phone: updatedUser.phone,
-              },
-            }
-          : product,
-      ),
-    );
-    if (selectedProduct?.seller?.id === currentUser.id) {
-      setSelectedProduct((currentProduct) =>
-        currentProduct
-          ? {
-              ...currentProduct,
-              seller: {
-                ...currentProduct.seller,
-                id: updatedUser.id,
-                name: updatedUser.name,
-                phone: updatedUser.phone,
-              },
-            }
-          : currentProduct,
+    try {
+      const updatedUser = await apiClient.updateProfile(nextProfile);
+      setCurrentUser(updatedUser);
+      setProducts((currentProducts) =>
+        currentProducts.map((product) =>
+          product.seller?.id === currentUser.id
+            ? {
+                ...product,
+                seller: {
+                  ...product.seller,
+                  id: updatedUser.id,
+                  name: updatedUser.name,
+                  phone: updatedUser.phone,
+                  email: updatedUser.email,
+                },
+              }
+            : product,
+        ),
       );
+      setThreads((currentThreads) =>
+        currentThreads.map((thread) =>
+          thread.product?.seller?.id === currentUser.id
+            ? {
+                ...thread,
+                product: thread.product
+                  ? {
+                      ...thread.product,
+                      seller: {
+                        ...thread.product.seller,
+                        id: updatedUser.id,
+                        name: updatedUser.name,
+                        phone: updatedUser.phone,
+                        email: updatedUser.email,
+                      },
+                    }
+                  : thread.product,
+              }
+            : thread,
+        ),
+      );
+      showToast({
+        type: "success",
+        title: "Profile saved",
+        message: "Your profile details were updated successfully.",
+      });
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Profile update failed",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not save your profile right now.",
+      });
     }
-    showToast({
-      type: "success",
-      title: "Profile saved",
-      message: "Your profile details were updated successfully.",
-    });
   };
 
-  const handleSignup = (signupForm) => {
-    const normalizedEmail = signupForm.email.trim().toLowerCase();
-    const emailInUse = registeredUsers.some((user) => user.email === normalizedEmail);
+  const handleSignup = async (signupForm) => {
+    setIsAuthSubmitting(true);
 
-    if (emailInUse) {
+    try {
+      const { user } = await apiClient.signup({
+        name: signupForm.name.trim(),
+        email: signupForm.email.trim().toLowerCase(),
+        phone: signupForm.phone.trim(),
+        password: signupForm.password,
+      });
+
+      setCurrentUser(user);
+      setThreads([]);
+      setOnlineUserIds([]);
+      setTypingByConversation({});
+      setActivePage("market");
+      showToast({
+        type: "success",
+        title: "Account created",
+        message: `Welcome to Kibu Market, ${user.name}.`,
+      });
+      return { ok: true };
+    } catch (error) {
       return {
         ok: false,
-        message: "An account with that email already exists. Try signing in instead.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not create that account.",
       };
+    } finally {
+      setIsAuthSubmitting(false);
     }
-
-    const createdUser = {
-      id: normalizedEmail.replace(/[^a-z0-9]+/g, "-"),
-      name: signupForm.name.trim(),
-      email: normalizedEmail,
-      phone: signupForm.phone.trim(),
-      campus: "Kibabii University",
-      bio: "New to Kibu Market and ready to buy or sell useful campus finds.",
-      password: signupForm.password,
-    };
-
-    setRegisteredUsers((currentAccounts) => [...currentAccounts, createdUser]);
-    setCurrentUser(createdUser);
-    setActivePage("market");
-    showToast({
-      type: "success",
-      title: "Account created",
-      message: `Welcome to Kibu Market, ${createdUser.name}.`,
-    });
-    return { ok: true };
   };
 
-  const handleLogin = (loginForm) => {
-    const normalizedEmail = loginForm.email.trim().toLowerCase();
-    const matchedUser = registeredUsers.find(
-      (user) =>
-        user.email === normalizedEmail && user.password === loginForm.password,
-    );
+  const handleLogin = async (loginForm) => {
+    setIsAuthSubmitting(true);
 
-    if (!matchedUser) {
+    try {
+      const { user } = await apiClient.login({
+        email: loginForm.email.trim().toLowerCase(),
+        password: loginForm.password,
+      });
+      const nextThreads = await apiClient.getThreads();
+
+      setCurrentUser(user);
+      setThreads(sortThreadsByLatest(nextThreads));
+      setProducts((currentProducts) => mergeProductsWithThreads(currentProducts, nextThreads));
+      setTypingByConversation({});
+      setActivePage("market");
+      showToast({
+        type: "success",
+        title: "Signed in",
+        message: `Welcome back, ${user.name}.`,
+      });
+      return { ok: true };
+    } catch (error) {
       return {
         ok: false,
-        message: "Incorrect email or password. Try the demo account seller@kibu.ac.ke / campus123.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not sign you in with those details.",
       };
+    } finally {
+      setIsAuthSubmitting(false);
     }
-
-    setCurrentUser(matchedUser);
-    setActivePage("market");
-    showToast({
-      type: "success",
-      title: "Signed in",
-      message: `Welcome back, ${matchedUser.name}.`,
-    });
-    return { ok: true };
   };
 
   const handleLogout = () => {
@@ -452,7 +828,12 @@ function Home() {
     }
 
     const userName = currentUser.name;
+    sessionStore.clear();
     setCurrentUser(null);
+    setThreads([]);
+    setOnlineUserIds([]);
+    setTypingByConversation({});
+    setSelectedMessageProductId(null);
     setActivePage("market");
     setSelectedProduct(null);
     showToast({
@@ -460,6 +841,134 @@ function Home() {
       title: "Signed out",
       message: `${userName} has been signed out.`,
     });
+  };
+
+  const handleJoinConversation = async (threadId) => {
+    if (!threadId) {
+      return { ok: false };
+    }
+
+    try {
+      if (isSocketConnected) {
+        const response = await joinConversation(threadId);
+        if (response?.conversation) {
+          const nextThread = normalizeThread(response.conversation);
+          applyThreadUpdate(nextThread, { messageMode: "replace" });
+          return { ok: true, thread: nextThread };
+        }
+      }
+
+      const messages = await apiClient.getThreadMessages(threadId);
+      applyThreadUpdate({ id: threadId, messages }, { messageMode: "replace" });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not open that conversation right now.",
+      };
+    }
+  };
+
+  const handleLeaveConversation = async (threadId) => {
+    if (!threadId || !isSocketConnected) {
+      return;
+    }
+
+    try {
+      await leaveConversation(threadId);
+    } catch {
+      // Ignore navigation-time leave failures.
+    }
+  };
+
+  const handleMarkThreadRead = async (threadId) => {
+    try {
+      const updatedThread = isSocketConnected
+        ? normalizeThread((await markConversationReadSocket(threadId)).conversation)
+        : await apiClient.markThreadRead(threadId);
+
+      applyThreadUpdate(updatedThread, { messageMode: "preserve" });
+      removeTypingState(threadId);
+
+      return { ok: true, thread: updatedThread };
+    } catch (error) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not update that conversation.",
+      };
+    }
+  };
+
+  const handleSendMessage = async ({ threadId, productId, recipientId, text }) => {
+    setIsMessageSending(true);
+
+    try {
+      const updatedThread = isSocketConnected
+        ? normalizeThread(
+            (
+              await sendSocketMessage({
+                conversationId: threadId,
+                productId,
+                recipientId,
+                text,
+              })
+            ).conversation,
+          )
+        : await apiClient.sendMessage({
+            threadId,
+            productId,
+            recipientId,
+            text,
+          });
+
+      applyThreadUpdate(updatedThread, {
+        messageMode: threadId ? "append" : "replace",
+      });
+
+      return { ok: true, thread: updatedThread };
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Message not sent",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not send your message right now.",
+      });
+      return { ok: false };
+    } finally {
+      setIsMessageSending(false);
+    }
+  };
+
+  const handleTypingStart = async (conversationId) => {
+    if (!conversationId || !isSocketConnected) {
+      return;
+    }
+
+    try {
+      await startTyping(conversationId);
+    } catch {
+      // Ignore transient typing errors.
+    }
+  };
+
+  const handleTypingStop = async (conversationId) => {
+    if (!conversationId || !isSocketConnected) {
+      return;
+    }
+
+    try {
+      await stopTyping(conversationId);
+    } catch {
+      // Ignore transient typing errors.
+    }
   };
 
   const handleReportListing = (reportedProduct) => {
@@ -472,7 +981,6 @@ function Home() {
 
   const handleBlockSeller = (blockedProduct) => {
     const sellerId = blockedProduct.seller?.id;
-
     if (!sellerId) {
       return;
     }
@@ -488,20 +996,25 @@ function Home() {
     });
   };
 
+  if (isBootstrapping) {
+    return <PageLoader label="Connecting to the marketplace API..." />;
+  }
+
   return (
     <div className="page-shell">
       <div className="page-glow page-glow-left" />
       <div className="page-glow page-glow-right" />
       <Navbar
+        className={activePage === "messages" ? "messages-navbar" : ""}
         onHomeClick={scrollToListings}
         onSellClick={openSellPage}
         onLogoutClick={handleLogout}
         onMessagesClick={openMessagesPage}
         currentUser={currentUser}
-        messageCount={products.filter((product) => (product.messages?.length ?? 0) > 0).length}
+        messageCount={unreadMessageCount}
       />
-      <main>
-        <div className="app-layout">
+      <main className={activePage === "messages" ? "page-main messages-main" : "page-main"}>
+        <div className={activePage === "messages" ? "app-layout messages-layout" : "app-layout"}>
           <aside className="desktop-side-menu" aria-label="Desktop navigation">
             <div className="desktop-side-menu-card">
               <div className="desktop-side-menu-header">
@@ -518,8 +1031,8 @@ function Home() {
                 >
                   <span className="desktop-side-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                      <polyline points="9 22 9 12 15 12 15 22"/>
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <polyline points="9 22 9 12 15 12 15 22" />
                     </svg>
                   </span>
                   <span className="desktop-side-copy">
@@ -530,13 +1043,32 @@ function Home() {
 
                 <button
                   type="button"
+                  className={activePage === "messages" ? "desktop-side-link active" : "desktop-side-link"}
+                  onClick={openMessagesPage}
+                >
+                  <span className="desktop-side-icon desktop-side-icon-with-badge">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    {unreadMessageCount > 0 ? (
+                      <span className="desktop-side-badge">{unreadMessageCount}</span>
+                    ) : null}
+                  </span>
+                  <span className="desktop-side-copy">
+                    <strong>Messages</strong>
+                    <small>Open your buying and selling chats</small>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
                   className={activePage === "my-listings" ? "desktop-side-link active" : "desktop-side-link"}
                   onClick={openMyListingsPage}
                 >
                   <span className="desktop-side-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 11l3 3L22 4"/>
-                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                      <path d="M9 11l3 3L22 4" />
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                     </svg>
                   </span>
                   <span className="desktop-side-copy">
@@ -552,8 +1084,8 @@ function Home() {
                 >
                   <span className="desktop-side-icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5z"/>
-                      <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8"/>
+                      <path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5z" />
+                      <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8" />
                     </svg>
                   </span>
                   <span className="desktop-side-copy">
@@ -576,13 +1108,20 @@ function Home() {
             </div>
           </aside>
 
-          <div className="app-content">
-            {activePage === "sell" ? (
+          <div className={activePage === "messages" ? "app-content messages-content" : "app-content"}>
+            {bootstrapError ? (
+              <div className="empty-state">
+                <span className="section-label">API unavailable</span>
+                <h3>We could not load live marketplace data.</h3>
+                <p>{bootstrapError}</p>
+              </div>
+            ) : activePage === "sell" ? (
               <Suspense fallback={<PageLoader label="Loading seller tools..." />}>
                 <SellItemForm
                   onAddItem={handleAddItem}
                   onBack={scrollToListings}
                   currentUser={currentUser}
+                  isSubmitting={isListingSubmitting}
                 />
               </Suspense>
             ) : activePage === "my-listings" ? (
@@ -595,9 +1134,11 @@ function Home() {
                 onDeleteListing={handleDeleteListing}
                 onChangeListingStatus={handleChangeListingStatus}
                 onUpdateListing={handleUpdateListing}
+                pendingActionId={pendingActionId}
               />
             ) : activePage === "profile" ? (
               <UserProfileScreen
+                key={currentUser?.id ?? "profile"}
                 products={products}
                 savedItems={savedItems}
                 userProfile={currentUser}
@@ -609,30 +1150,35 @@ function Home() {
             ) : activePage === "messages" ? (
               <MessagesScreen
                 products={products}
+                threads={threads}
                 currentUser={currentUser}
                 onBack={scrollToListings}
-                initialThreadId={selectedMessageThreadId}
+                initialProductId={selectedMessageProductId}
+                onSendMessage={handleSendMessage}
+                onMarkThreadRead={handleMarkThreadRead}
+                onJoinConversation={handleJoinConversation}
+                onLeaveConversation={handleLeaveConversation}
+                onTypingStart={handleTypingStart}
+                onTypingStop={handleTypingStop}
+                typingByConversation={typingByConversation}
+                onlineUserIds={onlineUserIds}
+                isSending={isMessageSending}
               />
             ) : activePage === "login" || activePage === "signup" ? (
               <Suspense fallback={<PageLoader label="Loading account page..." />}>
                 <AuthScreen
+                  key={activePage}
                   mode={activePage}
                   onModeChange={setActivePage}
                   onBack={scrollToListings}
                   onLogin={handleLogin}
                   onSignup={handleSignup}
+                  isSubmitting={isAuthSubmitting}
                 />
               </Suspense>
             ) : (
               <>
-                <Hero
-                  savedCount={savedItems.length}
-                  onSellClick={openSellPage}
-                  onMyListingsClick={openMyListingsPage}
-                  onProfileClick={openProfilePage}
-                  onBrowseClick={scrollToListings}
-                  featuredProducts={products.slice(0, 3)}
-                />
+                <Hero />
 
                 <section className="products-section" ref={listingsSectionRef}>
                   <SearchBar
@@ -640,9 +1186,6 @@ function Home() {
                     onQueryChange={handleSearchChange}
                     resultCount={visibleProducts.length}
                     totalCount={products.length}
-                    categories={categories}
-                    activeCategory={activeCategory}
-                    onCategoryChange={setActiveCategory}
                   />
 
                   <div className="market-controls">
@@ -652,9 +1195,7 @@ function Home() {
                           key={category}
                           type="button"
                           className={
-                            category === activeCategory
-                              ? "filter-chip active"
-                              : "filter-chip"
+                            category === activeCategory ? "filter-chip active" : "filter-chip"
                           }
                           onClick={() => setActiveCategory(category)}
                         >
@@ -665,10 +1206,7 @@ function Home() {
 
                     <label className="sort-control">
                       <span>Sort by</span>
-                      <select
-                        value={sortBy}
-                        onChange={(event) => setSortBy(event.target.value)}
-                      >
+                      <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
                         <option value="latest">Latest</option>
                         <option value="price-low">Price: low to high</option>
                         <option value="price-high">Price: high to low</option>
@@ -678,6 +1216,7 @@ function Home() {
                   </div>
 
                   <ProductList
+                    key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
                     products={visibleProducts}
                     savedItems={savedItems}
                     onSaveToggle={handleSaveToggle}
@@ -692,6 +1231,7 @@ function Home() {
       {selectedProduct ? (
         <Suspense fallback={<PageLoader label="Loading item details..." compact />}>
           <ProductModal
+            key={`${selectedProduct.id}-${selectedProduct.image}`}
             product={selectedProduct}
             products={products}
             isSaved={savedItems.includes(selectedProduct.id)}
@@ -714,64 +1254,6 @@ function PageLoader({ label, compact = false }) {
     <div className={compact ? "page-loader page-loader-compact" : "page-loader"}>
       <div className="page-loader-spinner" aria-hidden="true" />
       <p>{label}</p>
-    </div>
-  );
-}
-
-function TrustBadges() {
-  return (
-    <section className="trust-section">
-      <div className="trust-container">
-        <TrustCard 
-          icon={
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              <polyline points="9 12 11 14 15 10"/>
-            </svg>
-          }
-          title="Verified Students"
-          description="All sellers are verified university students"
-        />
-        <TrustCard 
-          icon={
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <polyline points="12 6 12 12 16 14"/>
-            </svg>
-          }
-          title="Quick Responses"
-          description="Most sellers respond within 24 hours"
-        />
-        <TrustCard 
-          icon={
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          }
-          title="Campus Pickup"
-          description="Meet sellers at convenient campus locations"
-        />
-        <TrustCard 
-          icon={
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-          }
-          title="500+ Happy Users"
-          description="Students love buying and selling here"
-        />
-      </div>
-    </section>
-  );
-}
-
-function TrustCard({ icon, title, description }) {
-  return (
-    <div className="trust-card">
-      <div className="trust-icon">{icon}</div>
-      <h3 className="trust-title">{title}</h3>
-      <p className="trust-description">{description}</p>
     </div>
   );
 }

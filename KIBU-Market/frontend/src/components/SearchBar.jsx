@@ -1,4 +1,4 @@
-function SearchBar({ query, onQueryChange, resultCount, totalCount, categories = [], activeCategory, onCategoryChange }) {
+function SearchBar({ query, onQueryChange, resultCount, totalCount }) {
   return (
     <section className="search-section">
       <div className="search-container">

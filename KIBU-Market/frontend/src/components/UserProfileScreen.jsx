@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   hasValidationErrors,
   validateEmail,
@@ -26,10 +26,6 @@ function UserProfileScreen({
   const [formData, setFormData] = useState(userProfile ?? emptyProfile);
   const [errors, setErrors] = useState({});
 
-  useEffect(() => {
-    setFormData(userProfile ?? emptyProfile);
-  }, [userProfile]);
-
   const validateProfileForm = (values) => ({
     name: validateRequiredText(values.name, "Full name", 2),
     email: validateEmail(values.email),
@@ -42,6 +38,19 @@ function UserProfileScreen({
   const postedProducts = products.filter(
     (product) => product.seller?.id === currentUser?.id,
   );
+
+  const getListingStatusLabel = (listingState) => {
+    switch (listingState) {
+      case "draft":
+        return "Draft";
+      case "paused":
+        return "Paused";
+      case "sold":
+        return "Sold";
+      default:
+        return "Active";
+    }
+  };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -225,15 +234,3 @@ function UserProfileScreen({
 }
 
 export default UserProfileScreen;
-  const getListingStatusLabel = (listingState) => {
-    switch (listingState) {
-      case "draft":
-        return "Draft";
-      case "paused":
-        return "Paused";
-      case "sold":
-        return "Sold";
-      default:
-        return "Active";
-    }
-  };

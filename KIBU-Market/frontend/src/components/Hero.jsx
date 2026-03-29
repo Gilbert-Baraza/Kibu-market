@@ -1,4 +1,4 @@
-function Hero({ onSellClick, onBrowseClick }) {
+function Hero() {
   return (
     <section className="hero">
       <div className="hero-content">

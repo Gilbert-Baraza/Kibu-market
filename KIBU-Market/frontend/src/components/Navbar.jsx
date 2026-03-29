@@ -1,4 +1,30 @@
-import { useState } from "react";
+﻿import { useState } from "react";
+
+function formatMessageLabel(messageCount) {
+  if (messageCount <= 0) {
+    return "All caught up";
+  }
+
+  if (messageCount === 1) {
+    return "1 new";
+  }
+
+  return `${messageCount} new`;
+}
+
+function getUserInitials(name) {
+  const parts = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return "KM";
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
 
 function Navbar({
   onHomeClick,
@@ -7,6 +33,7 @@ function Navbar({
   onMessagesClick,
   currentUser,
   messageCount = 0,
+  className = "",
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -15,8 +42,11 @@ function Navbar({
     callback();
   };
 
+  const messageLabel = formatMessageLabel(messageCount);
+  const userInitials = getUserInitials(currentUser?.name);
+
   return (
-    <nav className="navbar">
+    <nav className={className ? `navbar ${className}` : "navbar"}>
       <div className="navbar-container">
         <div className="navbar-brand-group">
           <button
@@ -72,7 +102,10 @@ function Navbar({
                 <span className="nav-badge">{messageCount}</span>
               ) : null}
             </span>
-            <span>Messages</span>
+            <span className="nav-link-copy">
+              <span>Messages</span>
+              <small className="nav-link-meta">{messageLabel}</small>
+            </span>
           </button>
 
           <button
@@ -86,6 +119,16 @@ function Navbar({
             </svg>
             <span>Sell Now</span>
           </button>
+
+          {currentUser ? (
+            <div className="nav-user-chip" aria-label={`Signed in as ${currentUser.name}`}>
+              <span className="nav-user-avatar">{userInitials}</span>
+              <span className="nav-user-copy">
+                <strong>{currentUser.name}</strong>
+                <small>Student account</small>
+              </span>
+            </div>
+          ) : null}
 
           {currentUser ? (
             <button

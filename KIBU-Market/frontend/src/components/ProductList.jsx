@@ -29,10 +29,6 @@ function ProductList({ products, savedItems, onSaveToggle, onViewDetails }) {
     };
   }, []);
 
-  useEffect(() => {
-    setVisibleRows(3);
-  }, [products]);
-
   if (products.length === 0) {
     return (
       <div className="empty-state">
