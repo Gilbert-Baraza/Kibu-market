@@ -1,14 +1,117 @@
+KIBU MARKET PRODUCTION ROADMAP
 
-Real auth logic
-Add basic session handling, protected seller pages, and user-specific listings instead of treating everyone as the same seller.
+PHASE 1: MUST-HAVE BEFORE LAUNCH
 
-Filters
-Add price range, location filter, category counts, and sort by newest/popularity.
+Testing
+- Add frontend integration tests for login, signup, listing creation, messaging, and saved items.
 
-Empty/loading states polish
-Make every page feel complete with better placeholders, loaders, and friendly empty states.
+Security
+- Add rate limiting for auth, chat, and listing endpoints.
+- Add security headers and harden Express production settings.
+- Add stronger upload validation for file type, size, and image sanitization.
+- Add stricter auth/session handling with token expiry and refresh strategy if needed.
+- Add audit logging for sensitive actions like login, profile updates, and listing deletion.
 
-Move products, auth, messages, and uploads to a real API so the app becomes production-ready.
+Backend Stability
+- Add pagination for listings, conversations, messages, and saved items.
+- Add stronger MongoDB indexes for search, conversations, unread counts, and message lookups.
+- Add backup and restore strategy for production MongoDB.
+- Add soft-delete strategy where necessary for listings and moderation workflows.
+
+Media And Performance
+- Move uploaded images to cloud storage such as Cloudinary or S3.
+- Generate optimized thumbnails for cards, chat previews, and listing detail pages.
+- Add lazy loading and image fallback handling across the UI.
+
+Monitoring And Operations
+- Add structured backend logs.
+- Add error monitoring for frontend and backend.
+- Add uptime monitoring and alerts.
+- Add separate environment configs for development, staging, and production.
+
+Legal And Trust
+- Add privacy policy page.
+- Add terms of use page.
+- Add support/contact path.
+- Add report listing flow connected to moderation review.
+
+Accessibility
+- Run a full accessibility pass on forms, navbar, product cards, chat, and modals.
+- Improve keyboard navigation and visible focus states.
+- Review color contrast and reduced-motion support.
 
 
+PHASE 2: SHOULD-HAVE IN THE FIRST MONTH
 
+Marketplace Search And Discovery
+- Add price range filter.
+- Add location filter.
+- Add category counts.
+- Add sort by newest and popularity.
+- Move all filtering to backend-supported queries for scale.
+
+Chat Improvements
+- Add attachment sending in chat.
+- Add retry state for failed messages.
+- Add reconnect sync so missed messages recover cleanly after connection loss.
+- Improve delivery/read state handling across refreshes and multiple sessions.
+
+Moderation And Safety
+- Add spam detection for suspicious listings and repeated message abuse.
+- Add banned word and unsafe content checks.
+- Add admin moderation queue for reports.
+- Add seller blocking persistence across devices.
+
+User Trust Features
+- Add campus email verification.
+- Add seller profile trust signals.
+- Add seller rating or reputation foundation.
+- Add reserved/held status in addition to active and sold.
+
+Performance
+- Review bundle size and route-level code splitting.
+- Optimize expensive renders in listing grids and messaging.
+- Improve perceived performance with better skeleton states and cache strategy.
+
+Analytics
+- Track listing views, saves, chat starts, search terms, and sell conversions.
+- Track drop-off in signup, listing creation, and first-message flows.
+
+
+PHASE 3: NICE-TO-HAVE AFTER TRACTION
+
+Growth Features
+- Add saved searches and recent searches.
+- Add recommendation or related listing logic based on behavior.
+- Add trending logic based on real marketplace activity.
+
+Notifications
+- Add email notifications for new messages.
+- Add push notifications or in-app notification center.
+
+Marketplace Experience
+- Add reservation workflow before marking an item sold.
+- Add seller reviews after successful deals.
+- Add listing boost or promotion tools if monetization is needed later.
+
+Platform Improvements
+- Add PWA support for installable mobile experience.
+- Add admin dashboard for moderation and marketplace health.
+- Add richer analytics dashboards for operators.
+
+
+CURRENT STATUS SNAPSHOT
+
+Already implemented
+- Real backend integration for auth, products, chat, uploads, and profile.
+- Unified inbox with dynamic buying/selling roles.
+- Real-time chat with Socket.IO.
+- Read receipts and delivery ticks in chat.
+- Mobile-focused homepage and messaging improvements.
+
+Still high priority
+- Automated tests.
+- Production monitoring.
+- Cloud image storage.
+- Security hardening.
+- Pagination and backend query optimization.

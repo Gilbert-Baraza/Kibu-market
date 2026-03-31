@@ -5,10 +5,12 @@
 1. Make sure MongoDB is running locally or update `.env` with your hosted connection string.
 2. Install dependencies:
    - `npm install`
-3. Seed the database from `frontend/src/data/products.js`:
+3. Seed the database from `src/scripts/seedData.js`:
    - `npm run seed`
 4. Start the development server:
    - `npm run dev`
+5. Run the backend API test suite:
+   - `npm test`
 
 ## Seeded accounts
 
@@ -23,6 +25,12 @@
 - `JWT_SECRET`
 - `JWT_EXPIRES_IN`
 - `CLIENT_URL`
+
+## Tests
+
+- The backend now includes API integration coverage for auth, listings, saved items, profile, and chat in `tests/api.test.js`.
+- The suite uses `supertest` plus `mongodb-memory-server` so it runs against the real Express app without touching your development database.
+- On the first test run, `mongodb-memory-server` may need to download a MongoDB binary, which can take a little while depending on your network.
 
 ## Main API routes
 
