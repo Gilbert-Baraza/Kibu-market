@@ -40,9 +40,9 @@ cd Kibu-market
 cd backend
 npm install
 ```
- Create a .env file:
+Create a .env file:
 ```
- PORT=5000
+ PORT= e.g 5000
  MONGO_URI=your_mongodb_connection_string
  JWT_SECRET=your_jwt_secret
  JWT_EXPIRES_IN=7d
@@ -55,5 +55,12 @@ npm run dev
 ```
 cd frontend
 npm install
+```
+Create a .env file:
+```
+VITE_API_BASE_URL= Backend url
+```
+Start frontend:
+```
 npm run dev
 ```
