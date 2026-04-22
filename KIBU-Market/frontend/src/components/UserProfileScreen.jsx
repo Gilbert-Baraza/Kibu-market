@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import SmartImage from "./SmartImage";
+import PaginationControls from "./PaginationControls";
 import {
   hasValidationErrors,
   validateEmail,
@@ -17,6 +19,9 @@ const emptyProfile = {
 function UserProfileScreen({
   products,
   savedItems,
+  savedProducts,
+  savedItemsPagination,
+  onSavedItemsPageChange,
   userProfile,
   currentUser,
   onBack,
@@ -26,6 +31,10 @@ function UserProfileScreen({
   const [formData, setFormData] = useState(userProfile ?? emptyProfile);
   const [errors, setErrors] = useState({});
 
+  useEffect(() => {
+    setFormData(userProfile ?? emptyProfile);
+  }, [userProfile]);
+
   const validateProfileForm = (values) => ({
     name: validateRequiredText(values.name, "Full name", 2),
     email: validateEmail(values.email),
@@ -34,7 +43,15 @@ function UserProfileScreen({
     bio: validateRequiredText(values.bio, "Bio", 20),
   });
 
-  const savedProducts = products.filter((product) => savedItems.includes(product.id));
+  const effectiveSavedProducts = savedProducts ?? products.filter((product) => savedItems.includes(product.id));
+  const effectiveSavedItemsPagination = savedItemsPagination ?? {
+    page: 1,
+    limit: effectiveSavedProducts.length || 1,
+    total: effectiveSavedProducts.length,
+    totalPages: 1,
+    hasPrevPage: false,
+    hasNextPage: false,
+  };
   const postedProducts = products.filter(
     (product) => product.seller?.id === currentUser?.id,
   );
@@ -177,18 +194,18 @@ function UserProfileScreen({
           <section className="profile-panel">
             <div className="profile-section-heading">
               <span className="section-label">Saved items</span>
-              <h3>{savedProducts.length} saved</h3>
+              <h3>{savedItems.length} saved</h3>
             </div>
             <div className="profile-item-list">
-              {savedProducts.length > 0 ? (
-                savedProducts.map((product) => (
+              {effectiveSavedProducts.length > 0 ? (
+                effectiveSavedProducts.map((product) => (
                   <button
                     key={product.id}
                     type="button"
                     className="profile-item-card"
                     onClick={() => onViewListing(product)}
                   >
-                    <img src={product.image} alt={product.title} className="profile-item-image" />
+                    <SmartImage src={product.imageVariants?.card ?? product.image} alt={product.title} className="profile-item-image" />
                     <div className="profile-item-copy">
                       <strong>{product.title}</strong>
                       <span>KES {product.price.toLocaleString()}</span>
@@ -199,6 +216,12 @@ function UserProfileScreen({
                 <p className="profile-empty-copy">Saved items will appear here.</p>
               )}
             </div>
+            <PaginationControls
+              pagination={effectiveSavedItemsPagination}
+              onPageChange={onSavedItemsPageChange}
+              compact
+              label="saved items"
+            />
           </section>
 
           <section className="profile-panel">
@@ -215,7 +238,7 @@ function UserProfileScreen({
                     className="profile-item-card"
                     onClick={() => onViewListing(product)}
                   >
-                    <img src={product.image} alt={product.title} className="profile-item-image" />
+                    <SmartImage src={product.imageVariants?.card ?? product.image} alt={product.title} className="profile-item-image" />
                     <div className="profile-item-copy">
                       <strong>{product.title}</strong>
                       <span>{getListingStatusLabel(product.listingState)}</span>

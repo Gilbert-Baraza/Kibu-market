@@ -23,9 +23,29 @@
 - `PORT`
 - `MONGODB_URI`
 - `JWT_SECRET`
+- `ACCESS_TOKEN_EXPIRES_IN`
+- `REFRESH_TOKEN_EXPIRES_IN`
 - `JWT_EXPIRES_IN`
 - `CLIENT_URL`
+- `TRUST_PROXY`
+- `BODY_SIZE_LIMIT`
+- `UPLOAD_MAX_BYTES`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+- `CLOUDINARY_FOLDER`
 
+
+
+## Media Storage
+
+- Uploads now use Cloudinary automatically when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` are set.
+- `CLOUDINARY_FOLDER` is optional and defaults to `kibu-market`.
+- If Cloudinary is not configured, the backend keeps using local `uploads/` storage so development still works without external credentials.
+## Audit Logging
+
+- The backend now emits structured audit log entries for sensitive actions such as login, profile updates, logout, and listing deletion.
+- Audit entries are written to standard output as JSON-prefixed `console.info` lines so they can be picked up by process managers or centralized logging later.
 ## Tests
 
 - The backend now includes API integration coverage for auth, listings, saved items, profile, and chat in `tests/api.test.js`.
@@ -69,3 +89,4 @@ These are also exposed to match the current frontend integration:
 - `GET /api/threads`
 - `POST /api/threads`
 - `POST /api/threads/:conversationId/messages`
+

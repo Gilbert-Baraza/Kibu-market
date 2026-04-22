@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import env from "./config/env.js";
 import apiRoutes from "./routes/index.js";
@@ -31,6 +32,9 @@ function isAllowedOrigin(origin) {
   return /^https?:\/\/(localhost|127\.0\.0\.1):(51\d{2}|4173)$/.test(origin);
 }
 
+app.disable("x-powered-by");
+app.set("trust proxy", env.trustProxy);
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -44,16 +48,72 @@ app.use(
     credentials: true,
   }),
 );
-app.use(helmet());
-app.use(morgan("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(`/${env.uploadsDir}`, express.static(path.resolve(__dirname, "..", env.uploadsDir)));
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    hsts: env.isProduction
+      ? {
+          maxAge: 15552000,
+          includeSubDomains: true,
+        }
+      : false,
+    referrerPolicy: { policy: "no-referrer" },
+    permissionsPolicy: {
+      features: {
+        camera: [],
+        geolocation: [],
+        microphone: [],
+        payment: [],
+      },
+    },
+  }),
+);
+
+if (env.nodeEnv !== "test") {
+  app.use(morgan(env.isProduction ? "combined" : "dev"));
+}
+
+app.use(express.json({ limit: env.bodySizeLimit }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: env.bodySizeLimit,
+    parameterLimit: 100,
+  }),
+);
+
+app.use((req, res, next) => {
+  req.requestId = crypto.randomUUID();
+  res.setHeader("X-Request-Id", req.requestId);
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), geolocation=(), microphone=(), payment=()",
+  );
+
+  if (req.path === "/health" || req.path.startsWith("/api/auth")) {
+    res.setHeader("Cache-Control", "no-store");
+  }
+
+  next();
+});
+
+app.use(
+  `/${env.uploadsDir}`,
+  express.static(path.resolve(__dirname, "..", env.uploadsDir), {
+    fallthrough: false,
+    index: false,
+    maxAge: env.isProduction ? "1d" : 0,
+  }),
+);
 
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "kibu-market-backend",
+    environment: env.nodeEnv,
   });
 });
 

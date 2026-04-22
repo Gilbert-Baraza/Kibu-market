@@ -7,7 +7,7 @@ export const registerValidator = [
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters."),
   body("avatar").optional().trim().isURL().withMessage("Avatar must be a valid URL."),
-  body("phone").optional().trim().isLength({ min: 7 }).withMessage("Phone number is too short."),
+  body("phone").optional({ checkFalsy: true }).trim().isLength({ min: 7 }).withMessage("Phone number is too short."),
   body("university").optional().trim().isLength({ min: 2 }).withMessage("University is too short."),
 ];
 
@@ -16,10 +16,17 @@ export const loginValidator = [
   body("password").notEmpty().withMessage("Password is required."),
 ];
 
+export const refreshSessionValidator = [
+  body("refreshToken")
+    .trim()
+    .notEmpty()
+    .withMessage("Refresh token is required."),
+];
+
 export const updateProfileValidator = [
   body("name").optional().trim().isLength({ min: 2 }).withMessage("Name is too short."),
   body("avatar").optional().trim().isURL().withMessage("Avatar must be a valid URL."),
-  body("phone").optional().trim().isLength({ min: 7 }).withMessage("Phone number is too short."),
+  body("phone").optional({ checkFalsy: true }).trim().isLength({ min: 7 }).withMessage("Phone number is too short."),
   body("university")
     .optional()
     .trim()

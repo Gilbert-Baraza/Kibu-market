@@ -1,4 +1,5 @@
 ﻿import { useState } from "react";
+import SmartImage from "./SmartImage";
 
 function getUserInitials(name) {
   const parts = String(name ?? "")
@@ -45,7 +46,7 @@ function Navbar({
             onClick={() => handleNavAction(onHomeClick)}
           >
             <div className="logo-icon">
-              <img src="/Kibu logo.png" alt="Kibu Market logo" className="brand-logo" />
+              <SmartImage src="/Kibu logo.png" alt="Kibu Market logo" className="brand-logo" loading="eager" />
             </div>
             <div className="logo-text">
               <span className="logo-name">KIBU MARKET</span>

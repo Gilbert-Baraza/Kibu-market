@@ -1,7 +1,16 @@
 import Listing from "../models/Listing.js";
 import { buildPagination } from "../utils/buildPagination.js";
 import { parseListingFilters } from "../utils/parseListingFilters.js";
+import { logAuditEvent } from "../utils/auditLogger.js";
 import { pick } from "../utils/pick.js";
+
+function normalizeImages(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return [...new Set(value.map((image) => String(image ?? "").trim()).filter(Boolean))];
+}
 
 function normalizeListingPayload(body) {
   const payload = pick(body, [
@@ -15,9 +24,9 @@ function normalizeListingPayload(body) {
   ]);
 
   if (Array.isArray(body.images)) {
-    payload.images = body.images;
+    payload.images = normalizeImages(body.images);
   } else if (body.image) {
-    payload.images = [body.image];
+    payload.images = normalizeImages([body.image]);
   }
 
   if (body.status) {
@@ -103,7 +112,24 @@ export async function updateListing(req, res) {
 }
 
 export async function deleteListing(req, res) {
+  const listingSnapshot = {
+    id: req.listing.id,
+    title: req.listing.title,
+    status: req.listing.status,
+  };
+
   await req.listing.deleteOne();
+
+  logAuditEvent(req, {
+    action: "listing.delete",
+    status: "success",
+    targetType: "listing",
+    targetId: listingSnapshot.id,
+    metadata: {
+      title: listingSnapshot.title,
+      status: listingSnapshot.status,
+    },
+  });
 
   res.json({
     message: "Listing deleted successfully.",

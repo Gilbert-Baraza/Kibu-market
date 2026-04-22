@@ -2,6 +2,7 @@ import { Router } from "express";
 import asyncHandler from "../utils/asyncHandler.js";
 import validateRequest from "../middleware/validateRequest.js";
 import { requireAuth } from "../middleware/auth.js";
+import { listingWriteRateLimit } from "../middleware/rateLimit.js";
 import { requireListingOwner } from "../middleware/ownership.js";
 import {
   createListing,
@@ -27,6 +28,7 @@ router.get("/:id", listingIdValidator, validateRequest, asyncHandler(getListingB
 router.post(
   "/",
   requireAuth,
+  listingWriteRateLimit,
   createListingValidator,
   validateRequest,
   asyncHandler(createListing),
@@ -34,6 +36,7 @@ router.post(
 router.put(
   "/:id",
   requireAuth,
+  listingWriteRateLimit,
   listingIdValidator,
   updateListingValidator,
   validateRequest,
@@ -43,6 +46,7 @@ router.put(
 router.patch(
   "/:id",
   requireAuth,
+  listingWriteRateLimit,
   listingIdValidator,
   updateListingValidator,
   validateRequest,
@@ -52,6 +56,7 @@ router.patch(
 router.delete(
   "/:id",
   requireAuth,
+  listingWriteRateLimit,
   listingIdValidator,
   validateRequest,
   asyncHandler(requireListingOwner),
@@ -60,6 +65,7 @@ router.delete(
 router.patch(
   "/:id/sold",
   requireAuth,
+  listingWriteRateLimit,
   listingIdValidator,
   validateRequest,
   asyncHandler(requireListingOwner),

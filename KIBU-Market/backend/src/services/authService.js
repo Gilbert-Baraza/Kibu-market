@@ -1,7 +1,30 @@
 import bcrypt from "bcryptjs";
 import ApiError from "../utils/ApiError.js";
 import User from "../models/User.js";
-import { generateToken } from "./tokenService.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  getAccessTokenExpiryDate,
+  getRefreshTokenExpiryDate,
+  hashToken,
+} from "./tokenService.js";
+
+async function issueSession(user) {
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashToken(refreshToken);
+  const refreshTokenExpiresAt = getRefreshTokenExpiryDate();
+
+  user.refreshTokenHash = refreshTokenHash;
+  user.refreshTokenExpiresAt = refreshTokenExpiresAt;
+  await user.save();
+
+  return {
+    user,
+    token: generateAccessToken(user.id),
+    refreshToken,
+    accessTokenExpiresAt: getAccessTokenExpiryDate().toISOString(),
+  };
+}
 
 export async function registerUser(payload) {
   const existingUser = await User.findOne({ email: payload.email.toLowerCase() });
@@ -20,14 +43,11 @@ export async function registerUser(payload) {
     university: payload.university,
   });
 
-  return {
-    user,
-    token: generateToken(user.id),
-  };
+  return issueSession(user);
 }
 
 export async function loginUser({ email, password }) {
-  const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
+  const user = await User.findOne({ email: email.toLowerCase() }).select("+password +refreshTokenHash +refreshTokenExpiresAt");
   if (!user) {
     throw new ApiError(401, "Invalid email or password.");
   }
@@ -37,8 +57,30 @@ export async function loginUser({ email, password }) {
     throw new ApiError(401, "Invalid email or password.");
   }
 
-  return {
-    user,
-    token: generateToken(user.id),
-  };
+  return issueSession(user);
+}
+
+export async function refreshUserSession(refreshToken) {
+  if (!refreshToken) {
+    throw new ApiError(401, "Refresh token is required.");
+  }
+
+  const refreshTokenHash = hashToken(refreshToken);
+  const user = await User.findOne({
+    refreshTokenHash,
+    refreshTokenExpiresAt: { $gt: new Date() },
+  }).select("+refreshTokenHash +refreshTokenExpiresAt");
+
+  if (!user) {
+    throw new ApiError(401, "Refresh token is invalid or expired.");
+  }
+
+  return issueSession(user);
+}
+
+export async function revokeUserSession(userId) {
+  await User.findByIdAndUpdate(userId, {
+    refreshTokenHash: null,
+    refreshTokenExpiresAt: null,
+  });
 }

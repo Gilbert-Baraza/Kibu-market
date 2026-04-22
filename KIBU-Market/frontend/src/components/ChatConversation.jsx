@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import SmartImage from "./SmartImage";
 
 function MessageStatusTicks({ status = "delivered" }) {
   if (status === "sending") {
@@ -66,6 +67,9 @@ function ChatConversation({
   productStatus = "active",
   presenceLabel = "Active listing",
   typingLabel = "",
+  hasOlderMessages = false,
+  isLoadingOlderMessages = false,
+  onLoadOlderMessages,
 }) {
   const isSelling = role === "selling";
   const firstName = otherParticipantName.split(" ")[0] ?? "them";
@@ -119,7 +123,7 @@ function ChatConversation({
           </button>
 
           <div className="messenger-avatar-shell">
-            <img src={product.image} alt={product.title} className="messenger-chat-avatar" />
+            <SmartImage src={product.imageVariants?.chat ?? product.image} alt={product.title} className="messenger-chat-avatar" />
             <span className="messenger-presence-dot" />
           </div>
 
@@ -141,11 +145,24 @@ function ChatConversation({
         <div className="messenger-product-copy">
           <span className="messenger-product-kicker">{roleContextLabel}</span>
           <strong>{product.title}</strong>
-          <p>{product.location} • KES {Number(product.price ?? 0).toLocaleString()}</p>
+          <p>{product.location} � KES {Number(product.price ?? 0).toLocaleString()}</p>
         </div>
       </div>
 
       <div className={mobile ? "messenger-chat-thread mobile-chat-thread" : "messenger-chat-thread"} ref={threadRef}>
+        {hasOlderMessages ? (
+          <div className="load-more-wrap messenger-load-more-wrap">
+            <button
+              type="button"
+              className="secondary-btn load-more-btn"
+              onClick={onLoadOlderMessages}
+              disabled={isLoadingOlderMessages}
+            >
+              {isLoadingOlderMessages ? "Loading older messages..." : "Load older messages"}
+            </button>
+          </div>
+        ) : null}
+
         <div className="messenger-day-pill">{roleContextLabel}</div>
 
         {messages.length > 0 ? messages.map((message) => {
@@ -172,7 +189,7 @@ function ChatConversation({
           );
         }) : (
           <div className="messenger-empty-thread-card">
-            <span className="messenger-empty-emoji">💬</span>
+            <span className="messenger-empty-emoji">??</span>
             <strong>Start the conversation</strong>
             <p>Ask {firstName} about the item, pickup, or price.</p>
           </div>

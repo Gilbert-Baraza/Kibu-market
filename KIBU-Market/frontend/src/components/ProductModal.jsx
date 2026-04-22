@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import SmartImage from "./SmartImage";
+import { buildGalleryVariants } from "../utils/imageVariants.js";
 
 function ProductModal({
   product,
@@ -12,14 +14,23 @@ function ProductModal({
   onSelectRelatedProduct,
 }) {
   const modalRef = useRef(null);
-  const [activeImage, setActiveImage] = useState(product.image);
+  const [activeImage, setActiveImage] = useState(product.imageVariants?.detail ?? product.image);
   const [shareMessage, setShareMessage] = useState("");
   const [isSellerExpanded, setIsSellerExpanded] = useState(false);
 
-  const galleryImages = useMemo(
-    () => (product.gallery?.length ? product.gallery : [product.image]),
-    [product],
-  );
+  const galleryImages = useMemo(() => {
+    const images = product.gallery?.length ? product.gallery : [product.image];
+    const variantList = product.galleryVariants?.length === images.length
+      ? product.galleryVariants
+      : buildGalleryVariants(images);
+
+    return images.map((image, index) => ({
+      original: image,
+      variants: variantList[index],
+      detail: variantList[index]?.detail ?? image,
+      card: variantList[index]?.card ?? image,
+    }));
+  }, [product]);
   const sellerListings = products.filter((item) => item.seller?.id === product.seller?.id);
   const activeSellerListings = sellerListings.filter(
     (item) => item.listingState !== "sold",
@@ -86,6 +97,10 @@ function ProductModal({
   };
 
   useEffect(() => {
+    setActiveImage(product.imageVariants?.detail ?? product.image);
+  }, [product]);
+
+  useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         onClose();
@@ -141,7 +156,7 @@ function ProductModal({
         </button>
 
         <div className="modal-media">
-          <img
+          <SmartImage
             src={activeImage}
             alt={product.title}
             className="modal-image"
@@ -151,18 +166,22 @@ function ProductModal({
           />
           {galleryImages.length > 1 ? (
             <div className="modal-gallery">
-              {galleryImages.map((image, index) => (
+              {galleryImages.map((imageEntry, index) => (
                 <button
                   key={`${product.id}-${index}`}
                   type="button"
                   className={
-                    image === activeImage
+                    imageEntry.detail === activeImage
                       ? "modal-thumb active"
                       : "modal-thumb"
                   }
-                  onClick={() => setActiveImage(image)}
+                  onClick={() => setActiveImage(imageEntry.detail)}
                 >
-                  <img src={image} alt={`${product.title} view ${index + 1}`} />
+                  <SmartImage
+                    src={imageEntry.card}
+                    alt={`${product.title} view ${index + 1}`}
+                    loading="eager"
+                  />
                 </button>
               ))}
             </div>
@@ -279,7 +298,7 @@ function ProductModal({
                         }
                         onClick={() => onSelectRelatedProduct(item)}
                       >
-                        <img src={item.image} alt={item.title} className="seller-mini-image" />
+                        <SmartImage src={item.imageVariants?.card ?? item.image} alt={item.title} className="seller-mini-image" />
                         <div className="seller-mini-copy">
                           <strong>{item.title}</strong>
                           <span>
@@ -369,7 +388,7 @@ function ProductModal({
                     className="related-item-card"
                     onClick={() => onSelectRelatedProduct(item)}
                   >
-                    <img src={item.image} alt={item.title} className="related-item-image" />
+                    <SmartImage src={item.imageVariants?.card ?? item.image} alt={item.title} className="related-item-image" />
                     <div className="related-item-copy">
                       <strong>{item.title}</strong>
                       <span>KES {item.price.toLocaleString()}</span>

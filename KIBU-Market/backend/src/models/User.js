@@ -37,6 +37,16 @@ const userSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    refreshTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    refreshTokenExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
     savedListings: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -52,6 +62,8 @@ const userSchema = new mongoose.Schema(
         delete ret._id;
         delete ret.__v;
         delete ret.password;
+        delete ret.refreshTokenHash;
+        delete ret.refreshTokenExpiresAt;
         return ret;
       },
     },
@@ -61,10 +73,15 @@ const userSchema = new mongoose.Schema(
         delete ret._id;
         delete ret.__v;
         delete ret.password;
+        delete ret.refreshTokenHash;
+        delete ret.refreshTokenExpiresAt;
         return ret;
       },
     },
   },
 );
+
+userSchema.index({ savedListings: 1, _id: 1 });
+userSchema.index({ refreshTokenExpiresAt: 1 }, { sparse: true });
 
 export default mongoose.model("User", userSchema);

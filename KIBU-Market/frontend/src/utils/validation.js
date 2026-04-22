@@ -46,7 +46,7 @@ export function validatePhone(value) {
   const normalizedValue = String(value ?? "").replace(/\s+/g, "");
 
   if (!normalizedValue) {
-    return "Phone number is required.";
+    return "";
   }
 
   if (!phonePattern.test(normalizedValue)) {

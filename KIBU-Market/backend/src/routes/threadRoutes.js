@@ -1,8 +1,9 @@
-﻿import { Router } from "express";
+import { Router } from "express";
 import Conversation from "../models/Conversation.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import validateRequest from "../middleware/validateRequest.js";
 import { requireAuth } from "../middleware/auth.js";
+import { chatRateLimit } from "../middleware/rateLimit.js";
 import {
   getConversationMessages,
   getConversations,
@@ -22,6 +23,7 @@ import ApiError from "../utils/ApiError.js";
 const router = Router();
 
 router.use(requireAuth);
+router.use(chatRateLimit);
 
 router.get("/", asyncHandler(getConversations));
 router.get(

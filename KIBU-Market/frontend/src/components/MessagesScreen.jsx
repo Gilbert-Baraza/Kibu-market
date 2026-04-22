@@ -1,5 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ChatConversation from "./ChatConversation";
+import SmartImage from "./SmartImage";
 
 const MESSENGER_THEME_STORAGE_KEY = "kibu-market-messenger-theme";
 const MOBILE_BREAKPOINT = 720;
@@ -106,6 +107,11 @@ function MessagesScreen({
   onlineUserIds = [],
   initialProductId = null,
   isSending = false,
+  hasMoreThreads = false,
+  onLoadMoreThreads,
+  messagePaginationByThread = {},
+  isLoadingOlderMessages = false,
+  onLoadOlderMessages,
 }) {
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -433,6 +439,7 @@ function MessagesScreen({
   const showThreadList = !isMobileLayout || !showMobileChat;
   const showChatPanel = !isMobileLayout || showMobileChat;
   const activeTypingState = selectedThread?.id ? typingByConversation[selectedThread.id] : null;
+  const selectedThreadPagination = selectedThread?.id ? messagePaginationByThread[selectedThread.id] : null;
 
   return (
     <section className={`messages-screen messenger-shell messenger-theme-${messengerTheme}`}>
@@ -534,8 +541,8 @@ function MessagesScreen({
                         }
                       }}
                     >
-                      <img
-                        src={thread.product.image}
+                      <SmartImage
+                        src={thread.product.imageVariants?.chat ?? thread.product.image}
                         alt={thread.product.title}
                         className="messenger-thread-avatar"
                       />
@@ -546,7 +553,7 @@ function MessagesScreen({
                         </div>
                         <div className="messenger-thread-line messenger-thread-line-meta">
                           <span className="messenger-thread-product">
-                            {thread.roleLabel} • {thread.product.title}
+                            {thread.roleLabel} � {thread.product.title}
                           </span>
                           {unreadCount > 0 ? (
                             <span className="messenger-unread-dot" aria-label={`${unreadCount} unread messages`} />
@@ -566,6 +573,14 @@ function MessagesScreen({
                 <EmptyInboxState {...emptyState} compact dark={messengerTheme === "dark"} />
               )}
             </div>
+
+            {hasMoreThreads ? (
+              <div className="load-more-wrap messenger-load-more-wrap">
+                <button type="button" className="secondary-btn load-more-btn" onClick={onLoadMoreThreads} disabled={!hasMoreThreads}>
+                  Load more conversations
+                </button>
+              </div>
+            ) : null}
           </aside>
         ) : null}
 
@@ -589,6 +604,9 @@ function MessagesScreen({
                 presenceLabel={selectedThread.presenceLabel}
                 typingLabel={activeTypingState?.userName ?? ""}
                 mobile={isMobileLayout}
+                hasOlderMessages={Boolean(selectedThreadPagination?.hasNextPage)}
+                isLoadingOlderMessages={isLoadingOlderMessages}
+                onLoadOlderMessages={() => onLoadOlderMessages?.(selectedThread.id)}
               />
             ) : (
               <div className="messenger-chat-panel messenger-chat-empty">

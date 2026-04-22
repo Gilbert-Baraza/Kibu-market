@@ -1,5 +1,5 @@
 import User from "../models/User.js";
-import { verifyToken } from "../services/tokenService.js";
+import { verifyAccessToken } from "../services/tokenService.js";
 import ApiError from "../utils/ApiError.js";
 
 export async function requireAuth(req, _res, next) {
@@ -11,7 +11,7 @@ export async function requireAuth(req, _res, next) {
       throw new ApiError(401, "Authentication required.");
     }
 
-    const payload = verifyToken(token);
+    const payload = verifyAccessToken(token);
     const user = await User.findById(payload.sub);
 
     if (!user) {

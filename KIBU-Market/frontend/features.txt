@@ -3,25 +3,26 @@ KIBU MARKET PRODUCTION ROADMAP
 PHASE 1: MUST-HAVE BEFORE LAUNCH
 
 Testing
-- Add frontend integration tests for login, signup, listing creation, messaging, and saved items.
+- Done: Add frontend integration tests for login, signup, listing creation, messaging, and saved items.
 
 Security
-- Add rate limiting for auth, chat, and listing endpoints.
-- Add security headers and harden Express production settings.
-- Add stronger upload validation for file type, size, and image sanitization.
-- Add stricter auth/session handling with token expiry and refresh strategy if needed.
-- Add audit logging for sensitive actions like login, profile updates, and listing deletion.
+- Done: Add rate limiting for auth, chat, and listing endpoints.
+- Done: Add security headers and harden Express production settings.
+- Done: Add stronger upload validation for file type, size, and image sanitization.
+- Done: Add stricter auth/session handling with token expiry and refresh strategy if needed.
+- Done: Add audit logging for sensitive actions like login, profile updates, and listing deletion.
+
+Media And Performance
+- Done: Scaffolded: Move uploaded images to cloud storage, Cloudinary. Requires Cloudinary env credentials to go live.
+- Done: Generate optimized thumbnails for cards, chat previews, and listing detail pages.
+- Done: Add lazy loading and image fallback handling across the UI.
 
 Backend Stability
-- Add pagination for listings, conversations, messages, and saved items.
-- Add stronger MongoDB indexes for search, conversations, unread counts, and message lookups.
+- Done: Add pagination for listings, conversations, messages, and saved items.
+- Done: Add stronger MongoDB indexes for search, conversations, unread counts, and message lookups.
 - Add backup and restore strategy for production MongoDB.
 - Add soft-delete strategy where necessary for listings and moderation workflows.
 
-Media And Performance
-- Move uploaded images to cloud storage such as Cloudinary or S3.
-- Generate optimized thumbnails for cards, chat previews, and listing detail pages.
-- Add lazy loading and image fallback handling across the UI.
 
 Monitoring And Operations
 - Add structured backend logs.
@@ -115,3 +116,9 @@ Still high priority
 - Cloud image storage.
 - Security hardening.
 - Pagination and backend query optimization.
+
+
+
+
+
+

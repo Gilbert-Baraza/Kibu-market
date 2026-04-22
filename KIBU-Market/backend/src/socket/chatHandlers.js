@@ -179,7 +179,8 @@ export function registerChatHandlers(io, socket) {
           userId: recipient.id,
         });
         const hydratedReadConversation = await hydrateConversation(readConversation.id);
-        const readPayload = serializeConversation(hydratedReadConversation);
+        const readMessages = await getConversationMessages(hydratedReadConversation.id);
+        const readPayload = serializeConversation(hydratedReadConversation, { messages: readMessages });
 
         io.to(roomName).emit("conversation:read:update", {
           conversationId: hydratedReadConversation.id,
@@ -223,7 +224,8 @@ export function registerChatHandlers(io, socket) {
       });
 
       const hydratedConversation = await hydrateConversation(updatedConversation.id);
-      const serializedConversation = serializeConversation(hydratedConversation);
+      const readMessages = await getConversationMessages(hydratedConversation.id);
+      const serializedConversation = serializeConversation(hydratedConversation, { messages: readMessages });
 
       io.to(getConversationRoomName(conversationId)).emit("conversation:read:update", {
         conversationId,

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import SmartImage from "./SmartImage";
 
 function formatPrice(value) {
   return `KES ${Number(value ?? 0).toLocaleString()}`;
@@ -9,7 +10,7 @@ function Hero({
   onBrowseClick,
   onSellClick,
 }) {
-  const heroProducts = products.slice(0, 3);
+  const heroProducts = products.slice(0, 6);
   const activeSellers = new Set(
     products.map((product) => String(product.seller?.id ?? "")).filter(Boolean),
   ).size;
@@ -195,6 +196,9 @@ function Hero({
             <div className="hero-preview-toolbar">
               <span className="hero-preview-chip">Fast replies</span>
               {heroProducts.length > 1 ? (
+                <span className="hero-preview-swipe-hint">Swipe</span>
+              ) : null}
+              {heroProducts.length > 1 ? (
                 <div className="hero-preview-carousel-controls" aria-label="Hero product carousel controls">
                   <button
                     type="button"
@@ -228,7 +232,7 @@ function Hero({
           >
             {heroProducts.map((product) => (
               <article key={product.id} className="hero-preview-card">
-                <img src={product.image} alt={product.title} loading="lazy" decoding="async" />
+                <SmartImage src={product.imageVariants?.card ?? product.image} alt={product.title} loading="lazy" decoding="async" />
                 <div className="hero-preview-copy">
                   <span>{product.category}</span>
                   <strong>{product.title}</strong>

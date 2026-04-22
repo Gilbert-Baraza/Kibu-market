@@ -18,6 +18,7 @@ const request = (await import("supertest")).default;
 const { MongoMemoryServer } = await import("mongodb-memory-server");
 
 const { default: app } = await import("../src/app.js");
+const { clearRateLimitStore } = await import("../src/middleware/rateLimit.js");
 const { default: Message } = await import("../src/models/Message.js");
 
 let mongoServer;
@@ -35,6 +36,21 @@ function buildUserPayload(overrides = {}) {
   };
 }
 
+const tinyPngBuffer = Buffer.from(
+  "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de0000000c49444154789c636060000000040001f61738550000000049454e44ae426082",
+  "hex",
+);
+
+function buildOversizedBuffer() {
+  return Buffer.alloc((5 * 1024 * 1024) + 1024, 0x41);
+}
+
+function parseAuditEntries(messages) {
+  return messages
+    .filter((entry) => typeof entry === "string" && entry.startsWith("[audit] "))
+    .map((entry) => JSON.parse(entry.slice(8)));
+}
+
 function buildListingPayload(overrides = {}) {
   return {
     title: "HP Scientific Calculator",
@@ -50,6 +66,7 @@ function buildListingPayload(overrides = {}) {
 }
 
 async function clearDatabase() {
+  clearRateLimitStore();
   const { collections } = mongoose.connection;
   await Promise.all(Object.values(collections).map((collection) => collection.deleteMany({})));
 }
@@ -116,6 +133,14 @@ async function testAuthApi() {
   assert.equal(registerResponse.body.user.email, signupPayload.email.toLowerCase());
   assert.equal(registerResponse.body.user.password, undefined);
 
+  const noPhonePayload = buildUserPayload({ phone: "" });
+  const noPhoneRegisterResponse = await request(app)
+    .post("/api/auth/register")
+    .send(noPhonePayload);
+
+  assert.equal(noPhoneRegisterResponse.statusCode, 201);
+  assert.equal(noPhoneRegisterResponse.body.user.phone, "");
+
   const loginResponse = await request(app)
     .post("/api/auth/login")
     .send({
@@ -148,9 +173,38 @@ async function testAuthApi() {
   assert.equal(updateResponse.body.user.university, "Kibu Main Campus");
 }
 
+async function testSecurityHeadersApi() {
+  const healthResponse = await request(app).get("/health");
+
+  assert.equal(healthResponse.statusCode, 200);
+  assert.equal(healthResponse.body.environment, "test");
+  assert.equal(healthResponse.headers["cache-control"], "no-store");
+  assert.equal(healthResponse.headers["x-frame-options"], "SAMEORIGIN");
+  assert.equal(healthResponse.headers["x-content-type-options"], "nosniff");
+  assert.equal(healthResponse.headers["referrer-policy"], "no-referrer");
+  assert.match(healthResponse.headers["permissions-policy"], /camera=\(\)/i);
+  assert.equal(healthResponse.headers["x-powered-by"], undefined);
+
+  const authPayload = buildUserPayload({ name: "Header Check User" });
+  const authResponse = await request(app)
+    .post("/api/auth/register")
+    .send(authPayload);
+
+  assert.equal(authResponse.statusCode, 201);
+  assert.equal(authResponse.headers["cache-control"], "no-store");
+}
 async function testListingsApi() {
   const seller = await registerUser({ name: "Seller Student" });
   const stranger = await registerUser({ name: "Other Student" });
+
+  const missingImagesResponse = await request(app)
+    .post("/api/listings")
+    .set("Authorization", "Bearer " + seller.token)
+    .send(buildListingPayload({ images: [] }));
+
+  assert.equal(missingImagesResponse.statusCode, 400);
+  assert.equal(missingImagesResponse.body.message, "Validation failed.");
+  assert.ok(missingImagesResponse.body.details.some((error) => /between 1 and 3 images/i.test(error.message)));
 
   const listing = await createListing(seller.token, {
     title: "Casio Calculator",
@@ -237,6 +291,120 @@ async function testSavedListingsApi() {
   assert.equal(emptySavedResponse.body.listings.length, 0);
 }
 
+async function testUploadsApi() {
+  const user = await registerUser({ name: "Upload Tester" });
+
+  const validUploadResponse = await request(app)
+    .post("/api/uploads")
+    .set("Authorization", `Bearer ${user.token}`)
+    .attach("file", tinyPngBuffer, {
+      filename: "campus-chair.png",
+      contentType: "image/png",
+    });
+
+  assert.equal(validUploadResponse.statusCode, 201);
+  assert.match(validUploadResponse.body.url, /\/uploads\//i);
+  assert.equal(validUploadResponse.body.file.mimetype, "image/png");
+  assert.match(validUploadResponse.body.file.filename, /\.png$/i);
+
+  const multiUploadResponse = await request(app)
+    .post("/api/uploads")
+    .set("Authorization", `Bearer ${user.token}`)
+    .attach("files", tinyPngBuffer, {
+      filename: "campus-chair-front.png",
+      contentType: "image/png",
+    })
+    .attach("files", tinyPngBuffer, {
+      filename: "campus-chair-side.png",
+      contentType: "image/png",
+    })
+    .attach("files", tinyPngBuffer, {
+      filename: "campus-chair-back.png",
+      contentType: "image/png",
+    });
+
+  assert.equal(multiUploadResponse.statusCode, 201);
+  assert.equal(multiUploadResponse.body.urls.length, 3);
+  assert.equal(multiUploadResponse.body.files.length, 3);
+
+  const fakeImageResponse = await request(app)
+    .post("/api/uploads")
+    .set("Authorization", `Bearer ${user.token}`)
+    .attach("file", Buffer.from("not really an image"), {
+      filename: "notes.png",
+      contentType: "image/png",
+    });
+
+  assert.equal(fakeImageResponse.statusCode, 400);
+  assert.match(fakeImageResponse.body.message, /not a valid supported image/i);
+
+  const oversizedUploadResponse = await request(app)
+    .post("/api/uploads")
+    .set("Authorization", `Bearer ${user.token}`)
+    .attach("file", buildOversizedBuffer(), {
+      filename: "huge.png",
+      contentType: "image/png",
+    });
+
+  assert.equal(oversizedUploadResponse.statusCode, 400);
+  assert.match(oversizedUploadResponse.body.message, /5mb or smaller/i);
+}
+async function testAuditLoggingApi() {
+  const auditMessages = [];
+  const originalConsoleInfo = console.info;
+  console.info = (message) => {
+    auditMessages.push(message);
+  };
+
+  try {
+    const seller = await registerUser({ name: "Audit Seller" });
+
+    const loginResponse = await request(app)
+      .post("/api/auth/login")
+      .send({
+        email: seller.payload.email,
+        password: seller.payload.password,
+      });
+
+    assert.equal(loginResponse.statusCode, 200);
+
+    const profileResponse = await request(app)
+      .patch("/api/users/me")
+      .set("Authorization", `Bearer ${loginResponse.body.token}`)
+      .send({
+        name: "Audit Seller Updated",
+        phone: "0799999999",
+      });
+
+    assert.equal(profileResponse.statusCode, 200);
+
+    const listing = await createListing(loginResponse.body.token, { title: "Audit Chair" });
+
+    const deleteResponse = await request(app)
+      .delete(`/api/listings/${listing.id}`)
+      .set("Authorization", `Bearer ${loginResponse.body.token}`);
+
+    assert.equal(deleteResponse.statusCode, 200);
+  } finally {
+    console.info = originalConsoleInfo;
+  }
+
+  const entries = parseAuditEntries(auditMessages);
+  const loginEntry = entries.find((entry) => entry.action === "auth.login" && entry.status === "success");
+  const profileEntry = entries.find((entry) => entry.action === "user.profile.update");
+  const listingDeleteEntry = entries.find((entry) => entry.action === "listing.delete");
+
+  assert.ok(loginEntry);
+  assert.equal(loginEntry.target.type, "user");
+  assert.ok(loginEntry.request.id);
+
+  assert.ok(profileEntry);
+  assert.deepEqual(profileEntry.metadata.changedFields.sort(), ["name", "phone"]);
+
+  assert.ok(listingDeleteEntry);
+  assert.equal(listingDeleteEntry.target.type, "listing");
+  assert.equal(listingDeleteEntry.metadata.title, "Audit Chair");
+}
 async function testProfileApi() {
   const seller = await registerUser({ name: "Seller Student" });
   const buyer = await registerUser({ name: "Buyer Student" });
@@ -330,16 +498,111 @@ async function testChatApi() {
   assert.equal(updatedMessage.readBy.length, 2);
 }
 
+async function testRateLimitingApi() {
+  const loginUser = await registerUser({ name: "Rate Limited Login User" });
+
+  clearRateLimitStore();
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const loginResponse = await request(app)
+      .post("/api/auth/login")
+      .send({
+        email: loginUser.payload.email,
+        password: loginUser.payload.password,
+      });
+
+    assert.equal(loginResponse.statusCode, 200);
+  }
+
+  const blockedLoginResponse = await request(app)
+    .post("/api/auth/login")
+    .send({
+      email: loginUser.payload.email,
+      password: loginUser.payload.password,
+    });
+
+  assert.equal(blockedLoginResponse.statusCode, 429);
+  assert.match(blockedLoginResponse.body.message, /too many authentication attempts/i);
+  assert.ok(blockedLoginResponse.headers["retry-after"]);
+
+  clearRateLimitStore();
+  const seller = await registerUser({ name: "Rate Limited Seller" });
+  clearRateLimitStore();
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const listingResponse = await request(app)
+      .post("/api/listings")
+      .set("Authorization", `Bearer ${seller.token}`)
+      .send(buildListingPayload({ title: `Rate Limited Listing ${attempt}` }));
+
+    assert.equal(listingResponse.statusCode, 201);
+  }
+
+  const blockedListingResponse = await request(app)
+    .post("/api/listings")
+    .set("Authorization", `Bearer ${seller.token}`)
+    .send(buildListingPayload({ title: "Rate Limited Listing Blocked" }));
+
+  assert.equal(blockedListingResponse.statusCode, 429);
+  assert.match(blockedListingResponse.body.message, /too many listing updates/i);
+
+  clearRateLimitStore();
+  const buyer = await registerUser({ name: "Rate Limited Buyer" });
+  const chatListing = await createListing(seller.token, { title: "Chat Rate Limit Chair" });
+
+  clearRateLimitStore();
+
+  const startConversationResponse = await request(app)
+    .post(`/api/chat/start/${chatListing.id}`)
+    .set("Authorization", `Bearer ${buyer.token}`);
+
+  assert.equal(startConversationResponse.statusCode, 201);
+
+  for (let attempt = 0; attempt < 19; attempt += 1) {
+    const chatResponse = await request(app)
+      .get("/api/chat/conversations")
+      .set("Authorization", `Bearer ${buyer.token}`);
+
+    assert.equal(chatResponse.statusCode, 200);
+  }
+
+  const blockedChatResponse = await request(app)
+    .get("/api/chat/conversations")
+    .set("Authorization", `Bearer ${buyer.token}`);
+
+  assert.equal(blockedChatResponse.statusCode, 429);
+  assert.match(blockedChatResponse.body.message, /too many chat requests/i);
+}
+
 try {
   await setupDatabase();
 
   await runScenario("Auth API", testAuthApi);
+  await runScenario("Security Headers API", testSecurityHeadersApi);
   await runScenario("Listings API", testListingsApi);
   await runScenario("Saved Listings API", testSavedListingsApi);
+  await runScenario("Uploads API", testUploadsApi);
+  await runScenario("Audit Logging API", testAuditLoggingApi);
   await runScenario("Profile API", testProfileApi);
   await runScenario("Chat API", testChatApi);
+  await runScenario("Rate Limiting API", testRateLimitingApi);
 
   console.log("All backend API tests passed.");
 } finally {
   await teardownDatabase();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

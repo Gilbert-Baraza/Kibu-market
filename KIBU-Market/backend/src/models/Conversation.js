@@ -63,6 +63,13 @@ const conversationSchema = new mongoose.Schema(
 );
 
 conversationSchema.index({ product: 1, buyer: 1 }, { unique: true });
+conversationSchema.index({ seller: 1, buyer: 1, product: 1 }, { unique: true });
 conversationSchema.index({ participants: 1, lastMessageAt: -1 });
+conversationSchema.index({ participants: 1, updatedAt: -1 });
+conversationSchema.index({ seller: 1, lastMessageAt: -1 });
+conversationSchema.index({ buyer: 1, lastMessageAt: -1 });
+conversationSchema.index({ product: 1, lastMessageAt: -1 });
+conversationSchema.index({ participants: 1, "unreadCounts.buyer": -1, lastMessageAt: -1 });
+conversationSchema.index({ participants: 1, "unreadCounts.seller": -1, lastMessageAt: -1 });
 
 export default mongoose.model("Conversation", conversationSchema);

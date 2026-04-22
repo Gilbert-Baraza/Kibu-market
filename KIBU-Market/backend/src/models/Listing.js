@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { buildGalleryVariants, buildImageVariants } from "../utils/imageVariants.js";
 
 const listingSchema = new mongoose.Schema(
   {
@@ -36,6 +37,13 @@ const listingSchema = new mongoose.Schema(
     },
     images: {
       type: [String],
+      required: true,
+      validate: {
+        validator(value) {
+          return Array.isArray(value) && value.length >= 1 && value.length <= 3;
+        },
+        message: "Listings must include between 1 and 3 images.",
+      },
       default: [],
     },
     location: {
@@ -63,6 +71,9 @@ const listingSchema = new mongoose.Schema(
       transform: (_doc, ret) => {
         ret.id = ret._id;
         ret.image = ret.images?.[0] ?? "";
+        ret.gallery = ret.images ?? [];
+        ret.imageVariants = buildImageVariants(ret.image);
+        ret.galleryVariants = buildGalleryVariants(ret.gallery);
         delete ret._id;
         delete ret.__v;
         return ret;
@@ -72,7 +83,12 @@ const listingSchema = new mongoose.Schema(
 );
 
 listingSchema.index({ title: "text", description: "text", category: "text", location: "text", tags: "text" });
+listingSchema.index({ seller: 1, status: 1, createdAt: -1 });
 listingSchema.index({ category: 1, status: 1, createdAt: -1 });
+listingSchema.index({ status: 1, createdAt: -1 });
+listingSchema.index({ status: 1, price: 1, createdAt: -1 });
+listingSchema.index({ category: 1, status: 1, price: 1 });
+listingSchema.index({ location: 1, status: 1, createdAt: -1 });
 listingSchema.index({ price: 1, status: 1 });
 
 export default mongoose.model("Listing", listingSchema);

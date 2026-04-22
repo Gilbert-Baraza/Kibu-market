@@ -1,5 +1,11 @@
-﻿const DEFAULT_API_BASE_URL = "http://localhost:4000/api";
+import { buildGalleryVariants, buildImageVariants } from "../utils/imageVariants.js";
+const DEFAULT_API_BASE_URL = "http://localhost:4000/api";
 const AUTH_TOKEN_KEY = "kibu-market-auth-token";
+const REFRESH_TOKEN_KEY = "kibu-market-refresh-token";
+const ACCESS_TOKEN_EXPIRES_AT_KEY = "kibu-market-access-token-expires-at";
+const ACCESS_TOKEN_REFRESH_BUFFER_MS = 15 * 1000;
+
+let refreshSessionPromise = null;
 
 export class ApiError extends Error {
   constructor(message, { status, payload } = {}) {
@@ -30,13 +36,36 @@ function getStoredAuthToken() {
   return window.localStorage.getItem(AUTH_TOKEN_KEY);
 }
 
-function setStoredAuthToken(token) {
-  if (!token) {
+function getStoredRefreshToken() {
+  return window.localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+function getStoredAccessTokenExpiresAt() {
+  return window.localStorage.getItem(ACCESS_TOKEN_EXPIRES_AT_KEY);
+}
+
+function setStoredSession({ token, refreshToken, accessTokenExpiresAt } = {}) {
+  if (token) {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } else {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
-    return;
   }
 
-  window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  if (refreshToken) {
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  } else {
+    window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
+
+  if (accessTokenExpiresAt) {
+    window.localStorage.setItem(ACCESS_TOKEN_EXPIRES_AT_KEY, accessTokenExpiresAt);
+  } else {
+    window.localStorage.removeItem(ACCESS_TOKEN_EXPIRES_AT_KEY);
+  }
+}
+
+function clearStoredSession() {
+  setStoredSession({ token: null, refreshToken: null, accessTokenExpiresAt: null });
 }
 
 function ensureArray(value) {
@@ -126,6 +155,14 @@ function normalizeSeller(product) {
 }
 
 export function normalizeProduct(product) {
+  const primaryImage =
+    product.image ??
+    product.imageUrl ??
+    product.coverImage ??
+    "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80";
+  const gallery = ensureArray(product.gallery ?? product.images ?? product.imageUrls);
+  const normalizedGallery = gallery.length > 0 ? gallery : [primaryImage];
+
   return {
     id: product.id ?? product._id ?? product.productId ?? crypto.randomUUID(),
     title: product.title ?? product.name ?? "Untitled listing",
@@ -135,12 +172,10 @@ export function normalizeProduct(product) {
     description: product.description ?? "",
     tags: ensureArray(product.tags),
     listingState: product.listingState ?? product.status ?? "active",
-    image:
-      product.image ??
-      product.imageUrl ??
-      product.coverImage ??
-      "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80",
-    gallery: ensureArray(product.gallery ?? product.images ?? product.imageUrls),
+    image: primaryImage,
+    imageVariants: product.imageVariants ?? buildImageVariants(primaryImage),
+    gallery: normalizedGallery,
+    galleryVariants: product.galleryVariants ?? buildGalleryVariants(normalizedGallery),
     seller: normalizeSeller(product),
     createdAt: product.createdAt ?? product.updatedAt ?? null,
     messages: ensureArray(product.messages).map(normalizeMessage),
@@ -187,7 +222,51 @@ async function parseResponse(response) {
   return response.text();
 }
 
-async function request(path, { method = "GET", body, headers, token, signal } = {}) {
+function unwrapEntity(payload) {
+  return payload?.data ?? payload?.item ?? payload?.user ?? payload?.product ?? payload;
+}
+
+function unwrapToken(payload) {
+  return payload?.token ?? payload?.accessToken ?? payload?.data?.token ?? null;
+}
+
+function unwrapRefreshToken(payload) {
+  return payload?.refreshToken ?? payload?.data?.refreshToken ?? null;
+}
+
+function unwrapAccessTokenExpiresAt(payload) {
+  return payload?.accessTokenExpiresAt ?? payload?.data?.accessTokenExpiresAt ?? null;
+}
+
+function extractSession(payload) {
+  return {
+    token: unwrapToken(payload),
+    refreshToken: unwrapRefreshToken(payload),
+    accessTokenExpiresAt: unwrapAccessTokenExpiresAt(payload),
+  };
+}
+
+function isAuthRefreshRoute(path) {
+  return path === "/auth/refresh";
+}
+
+function shouldRefreshAccessToken() {
+  const accessToken = getStoredAuthToken();
+  const accessTokenExpiresAt = getStoredAccessTokenExpiresAt();
+
+  if (!accessToken || !accessTokenExpiresAt) {
+    return false;
+  }
+
+  const expiresAt = new Date(accessTokenExpiresAt).getTime();
+  if (!Number.isFinite(expiresAt)) {
+    return false;
+  }
+
+  return expiresAt - Date.now() <= ACCESS_TOKEN_REFRESH_BUFFER_MS;
+}
+
+async function sendRequest(path, { method = "GET", body, headers, token, signal } = {}) {
   const isFormData = body instanceof FormData;
   const authToken = token ?? getStoredAuthToken();
   const nextHeaders = new Headers(headers ?? {});
@@ -210,12 +289,72 @@ async function request(path, { method = "GET", body, headers, token, signal } = 
   });
 
   const payload = await parseResponse(response);
+  return { response, payload };
+}
+
+async function refreshStoredSession(signal) {
+  const refreshToken = getStoredRefreshToken();
+  if (!refreshToken) {
+    throw new ApiError("Session refresh is not available.", { status: 401 });
+  }
+
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = (async () => {
+      const { response, payload } = await sendRequest("/auth/refresh", {
+        method: "POST",
+        body: { refreshToken },
+        signal,
+        token: null,
+      });
+
+      if (!response.ok) {
+        const message = payload?.message ?? payload?.error ?? "Session refresh failed.";
+        clearStoredSession();
+        throw new ApiError(message, { status: response.status, payload });
+      }
+
+      const nextSession = extractSession(payload);
+      setStoredSession(nextSession);
+      return nextSession;
+    })().finally(() => {
+      refreshSessionPromise = null;
+    });
+  }
+
+  return refreshSessionPromise;
+}
+
+async function request(path, options = {}) {
+  const shouldHandleRefresh = !options.skipAuthRefresh && !isAuthRefreshRoute(path);
+
+  if (shouldHandleRefresh && shouldRefreshAccessToken() && getStoredRefreshToken()) {
+    await refreshStoredSession(options.signal);
+  }
+
+  const { response, payload } = await sendRequest(path, options);
+
+  if (
+    response.status === 401 &&
+    shouldHandleRefresh &&
+    !options.hasRetriedAfterRefresh &&
+    getStoredRefreshToken()
+  ) {
+    await refreshStoredSession(options.signal);
+    return request(path, {
+      ...options,
+      hasRetriedAfterRefresh: true,
+    });
+  }
 
   if (!response.ok) {
     const message =
       payload?.message ??
       payload?.error ??
       `Request failed with status ${response.status}.`;
+
+    if (response.status === 401) {
+      clearStoredSession();
+    }
 
     throw new ApiError(message, {
       status: response.status,
@@ -242,20 +381,35 @@ function unwrapList(payload) {
   return [];
 }
 
-function unwrapEntity(payload) {
-  return payload?.data ?? payload?.item ?? payload?.user ?? payload?.product ?? payload;
+function unwrapPagination(payload) {
+  return payload?.pagination ?? null;
 }
 
-function unwrapToken(payload) {
-  return payload?.token ?? payload?.accessToken ?? payload?.data?.token ?? null;
+function normalizePagedOptions(optionsOrSignal, defaultLimit) {
+  if (optionsOrSignal && typeof optionsOrSignal === "object" && "aborted" in optionsOrSignal) {
+    return { signal: optionsOrSignal, page: 1, limit: defaultLimit };
+  }
+
+  return {
+    signal: optionsOrSignal?.signal,
+    page: optionsOrSignal?.page ?? 1,
+    limit: optionsOrSignal?.limit ?? defaultLimit,
+  };
 }
 
 export const sessionStore = {
   getToken: getStoredAuthToken,
-  setToken: setStoredAuthToken,
-  clear() {
-    setStoredAuthToken(null);
+  getRefreshToken: getStoredRefreshToken,
+  getAccessTokenExpiresAt: getStoredAccessTokenExpiresAt,
+  setToken(token) {
+    setStoredSession({
+      token,
+      refreshToken: getStoredRefreshToken(),
+      accessTokenExpiresAt: getStoredAccessTokenExpiresAt(),
+    });
   },
+  setSession: setStoredSession,
+  clear: clearStoredSession,
   getApiBaseUrl,
   readCachedJson(key, fallbackValue) {
     return readJson(window.localStorage.getItem(key), fallbackValue);
@@ -267,15 +421,15 @@ export const apiClient = {
     const payload = await request("/auth/login", {
       method: "POST",
       body: credentials,
+      skipAuthRefresh: true,
     });
 
-    const token = unwrapToken(payload);
-    if (token) {
-      setStoredAuthToken(token);
-    }
+    setStoredSession(extractSession(payload));
 
     return {
-      token,
+      token: unwrapToken(payload),
+      refreshToken: unwrapRefreshToken(payload),
+      accessTokenExpiresAt: unwrapAccessTokenExpiresAt(payload),
       user: normalizeUser(unwrapEntity(payload)),
     };
   },
@@ -283,17 +437,30 @@ export const apiClient = {
     const response = await request("/auth/signup", {
       method: "POST",
       body: payload,
+      skipAuthRefresh: true,
     });
 
-    const token = unwrapToken(response);
-    if (token) {
-      setStoredAuthToken(token);
-    }
+    setStoredSession(extractSession(response));
 
     return {
-      token,
+      token: unwrapToken(response),
+      refreshToken: unwrapRefreshToken(response),
+      accessTokenExpiresAt: unwrapAccessTokenExpiresAt(response),
       user: normalizeUser(unwrapEntity(response)),
     };
+  },
+  async refreshSession(signal) {
+    const session = await refreshStoredSession(signal);
+    return session;
+  },
+  async logout() {
+    try {
+      await request("/auth/logout", {
+        method: "POST",
+      });
+    } finally {
+      clearStoredSession();
+    }
   },
   async getCurrentUser(signal) {
     const payload = await request("/auth/me", { signal });
@@ -309,6 +476,24 @@ export const apiClient = {
   async getProducts(signal) {
     const payload = await request("/products", { signal });
     return unwrapList(payload).map(normalizeProduct);
+  },
+  async getProductsPage(optionsOrSignal = {}) {
+    const { signal, page, limit, search, category, sort, status } = optionsOrSignal && typeof optionsOrSignal === "object" && !("aborted" in optionsOrSignal)
+      ? optionsOrSignal
+      : normalizePagedOptions(optionsOrSignal, 12);
+    const params = new URLSearchParams({
+      page: String(page ?? 1),
+      limit: String(limit ?? 12),
+    });
+    if (search) { params.set("search", search); }
+    if (category) { params.set("category", category); }
+    if (sort) { params.set("sort", sort); }
+    if (status) { params.set("status", status); }
+    const payload = await request(`/products?${params.toString()}`, { signal });
+    return {
+      items: unwrapList(payload).map(normalizeProduct),
+      pagination: unwrapPagination(payload),
+    };
   },
   async createProduct(product) {
     const payload = await request("/products", {
@@ -329,13 +514,33 @@ export const apiClient = {
       method: "DELETE",
     });
   },
+  async getMyProducts(signal) {
+    const payload = await request("/products/mine", { signal });
+    return unwrapList(payload).map(normalizeProduct);
+  },
   async getThreads(signal) {
     const payload = await request("/threads", { signal });
     return unwrapList(payload).map(normalizeThread);
   },
+  async getThreadsPage(optionsOrSignal = {}) {
+    const { signal, page, limit } = normalizePagedOptions(optionsOrSignal, 10);
+    const payload = await request(`/threads?page=${page}&limit=${limit}`, { signal });
+    return {
+      items: unwrapList(payload).map(normalizeThread),
+      pagination: unwrapPagination(payload),
+    };
+  },
   async getThreadMessages(threadId, signal) {
     const payload = await request(`/threads/${threadId}/messages`, { signal });
     return unwrapList(payload).map(normalizeMessage);
+  },
+  async getThreadMessagesPage(threadId, optionsOrSignal = {}) {
+    const { signal, page, limit } = normalizePagedOptions(optionsOrSignal, 20);
+    const payload = await request(`/threads/${threadId}/messages?page=${page}&limit=${limit}`, { signal });
+    return {
+      items: unwrapList(payload).map(normalizeMessage),
+      pagination: unwrapPagination(payload),
+    };
   },
   async markThreadRead(threadId) {
     const payload = await request(`/threads/${threadId}/read`, {
@@ -367,5 +572,23 @@ export const apiClient = {
     });
 
     return payload?.url ?? payload?.data?.url ?? payload?.file?.url ?? "";
+  },
+  async uploadFiles(files = []) {
+    const selectedFiles = Array.isArray(files) ? files.filter(Boolean).slice(0, 3) : [];
+    if (selectedFiles.length === 0) {
+      return [];
+    }
+
+    const formData = new FormData();
+    for (const file of selectedFiles) {
+      formData.append("files", file);
+    }
+
+    const payload = await request("/uploads", {
+      method: "POST",
+      body: formData,
+    });
+
+    return payload?.urls ?? payload?.data?.urls ?? [payload?.url ?? payload?.data?.url].filter(Boolean);
   },
 };

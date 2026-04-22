@@ -1,5 +1,21 @@
 import { body, param, query } from "express-validator";
 
+const imageArrayValidator = body("images")
+  .isArray({ min: 1, max: 3 })
+  .withMessage("Listings must include between 1 and 3 images.");
+
+const optionalImageArrayValidator = body("images")
+  .optional()
+  .isArray({ min: 1, max: 3 })
+  .withMessage("Listings can include between 1 and 3 images.");
+
+const imageEntriesValidator = body("images.*")
+  .optional()
+  .isString()
+  .trim()
+  .notEmpty()
+  .withMessage("Each image must be a valid URL string.");
+
 export const createListingValidator = [
   body("title").trim().isLength({ min: 3 }).withMessage("Title must be at least 3 characters."),
   body("description")
@@ -13,7 +29,8 @@ export const createListingValidator = [
     .isIn(["new", "like new", "good", "fair", "used"])
     .withMessage("Condition is invalid."),
   body("tags").optional().isArray().withMessage("Tags must be an array."),
-  body("images").optional().isArray().withMessage("Images must be an array."),
+  imageArrayValidator,
+  imageEntriesValidator,
   body("location").trim().notEmpty().withMessage("Location is required."),
 ];
 
@@ -31,7 +48,8 @@ export const updateListingValidator = [
     .isIn(["new", "like new", "good", "fair", "used"])
     .withMessage("Condition is invalid."),
   body("tags").optional().isArray().withMessage("Tags must be an array."),
-  body("images").optional().isArray().withMessage("Images must be an array."),
+  optionalImageArrayValidator,
+  imageEntriesValidator,
   body("location").optional().trim().notEmpty().withMessage("Location cannot be empty."),
   body("status").optional().isIn(["active", "sold"]).withMessage("Status is invalid."),
   body("listingState").optional().isIn(["active", "sold", "draft", "paused"]).withMessage("listingState is invalid."),

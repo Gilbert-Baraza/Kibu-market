@@ -1,5 +1,5 @@
-﻿import User from "../models/User.js";
-import { verifyToken } from "../services/tokenService.js";
+import User from "../models/User.js";
+import { verifyAccessToken } from "../services/tokenService.js";
 
 export async function socketAuth(socket, next) {
   try {
@@ -13,7 +13,7 @@ export async function socketAuth(socket, next) {
       return;
     }
 
-    const payload = verifyToken(authToken);
+    const payload = verifyAccessToken(authToken);
     const user = await User.findById(payload.sub).select("name email avatar phone university");
 
     if (!user) {

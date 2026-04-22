@@ -1,3 +1,5 @@
+import SmartImage from "./SmartImage";
+
 function formatRelativeTime(value) {
   if (!value) {
     return "Just now";
@@ -67,8 +69,8 @@ function ProductCard({
       aria-label={`View details for ${product.title}`}
     >
       <div className="product-image-container">
-        <img
-          src={product.image}
+        <SmartImage
+          src={product.imageVariants?.card ?? product.image}
           alt={product.title}
           className="product-image"
           loading="lazy"

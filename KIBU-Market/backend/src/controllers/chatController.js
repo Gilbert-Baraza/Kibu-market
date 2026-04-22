@@ -6,6 +6,8 @@ import {
   markConversationAsRead,
   startConversationForListing,
 } from "../services/chatService.js";
+import { buildPagination } from "../utils/buildPagination.js";
+import { parsePagination } from "../utils/parsePagination.js";
 
 export async function startConversation(req, res) {
   const conversation = await startConversationForListing({
@@ -21,15 +23,23 @@ export async function startConversation(req, res) {
 }
 
 export async function getConversations(req, res) {
-  const conversations = await Conversation.find({
+  const { page, limit, skip } = parsePagination(req.query, { defaultLimit: 10 });
+  const filters = {
     participants: req.user._id,
-  })
-    .populate("product", "title price images location status seller")
-    .populate("buyer seller participants", "name email avatar phone university")
-    .populate("lastSender", "name email avatar")
-    .sort({ lastMessageAt: -1, updatedAt: -1 });
+  };
 
-  res.json({ conversations, data: conversations });
+  const [conversations, total] = await Promise.all([
+    Conversation.find(filters)
+      .populate("product", "title price images location status seller")
+      .populate("buyer seller participants", "name email avatar phone university")
+      .populate("lastSender", "name email avatar")
+      .sort({ lastMessageAt: -1, updatedAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Conversation.countDocuments(filters),
+  ]);
+
+  res.json({ conversations, data: conversations, pagination: buildPagination(page, limit, total) });
 }
 
 export async function getConversation(req, res) {
@@ -46,12 +56,25 @@ export async function getConversationMessages(req, res) {
     conversationId: req.params.conversationId,
     userId: req.user._id,
   });
+  const { page, limit, skip } = parsePagination(req.query, { defaultLimit: 20 });
+  const filters = { conversation: conversation._id };
 
-  const messages = await Message.find({ conversation: conversation._id })
-    .populate("sender", "name email avatar phone university")
-    .sort({ createdAt: 1 });
+  const [messages, total] = await Promise.all([
+    Message.find(filters)
+      .populate("sender", "name email avatar phone university")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    Message.countDocuments(filters),
+  ]);
 
-  res.json({ messages, data: messages });
+  const orderedMessages = [...messages].reverse();
+
+  res.json({
+    messages: orderedMessages,
+    data: orderedMessages,
+    pagination: buildPagination(page, limit, total),
+  });
 }
 
 export async function sendConversationMessage(req, res) {
@@ -90,9 +113,18 @@ export async function markConversationRead(req, res) {
     userId: req.user._id,
   });
 
+  const messages = await Message.find({ conversation: updatedConversation._id })
+    .populate("sender", "name email avatar phone university")
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .then((items) => items.reverse());
+
   res.json({
     message: "Conversation marked as read.",
-    conversation: updatedConversation,
+    conversation: {
+      ...(updatedConversation.toJSON ? updatedConversation.toJSON() : updatedConversation),
+      messages,
+    },
     data: updatedConversation,
   });
 }

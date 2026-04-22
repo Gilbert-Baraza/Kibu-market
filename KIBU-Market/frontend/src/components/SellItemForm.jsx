@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
+import SmartImage from "./SmartImage";
 import {
   hasValidationErrors,
   validatePrice,
   validateRequiredText,
 } from "../utils/validation";
+
+const MAX_IMAGES = 3;
 
 const initialFormState = {
   title: "",
@@ -18,14 +21,24 @@ const initialFormState = {
 function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) {
   const [formData, setFormData] = useState(initialFormState);
   const [errors, setErrors] = useState({});
-  const [imagePreview, setImagePreview] = useState("");
-  const [imageFile, setImageFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const imagePreviewsRef = useRef([]);
+
+  const revokePreviewUrls = (previews) => {
+    previews.forEach((preview) => {
+      if (String(preview).startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
+    });
+  };
 
   const validateForm = (values) => ({
     title: validateRequiredText(values.title, "Item title", 3),
     price: validatePrice(values.price),
     location: validateRequiredText(values.location, "Pickup location", 3),
     description: validateRequiredText(values.description, "Description", 20),
+    images: values.imageFiles?.length ? "" : "Add at least 1 primary image.",
   });
 
   const handleChange = (event) => {
@@ -39,6 +52,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
       [name]: validateForm({
         ...formData,
         [name]: value,
+        imageFiles,
       })[name],
     }));
   };
@@ -50,41 +64,68 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
       [name]: validateForm({
         ...formData,
         [name]: value,
+        imageFiles,
       })[name],
     }));
   };
 
   useEffect(() => {
-    return () => {
-      if (imagePreview.startsWith("blob:")) {
-        URL.revokeObjectURL(imagePreview);
-      }
-    };
-  }, [imagePreview]);
+    imagePreviewsRef.current = imagePreviews;
+  }, [imagePreviews]);
+
+  useEffect(() => () => revokePreviewUrls(imagePreviewsRef.current), []);
 
   const handleImageChange = (event) => {
-    const file = event.target.files?.[0];
+    const nextFiles = Array.from(event.target.files ?? []).slice(0, MAX_IMAGES);
 
-    if (!file) {
-      if (imagePreview.startsWith("blob:")) {
-        URL.revokeObjectURL(imagePreview);
-      }
-      setImagePreview("");
-      setImageFile(null);
+    revokePreviewUrls(imagePreviews);
+    setImageFiles(nextFiles);
+    setImagePreviews(nextFiles.map((file) => URL.createObjectURL(file)));
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      images: nextFiles.length ? "" : "Add at least 1 primary image.",
+    }));
+    event.target.value = "";
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    const nextFiles = imageFiles.filter((_, index) => index !== indexToRemove);
+    const nextPreviews = imagePreviews.filter((_, index) => index !== indexToRemove);
+    const removedPreview = imagePreviews[indexToRemove];
+
+    if (String(removedPreview).startsWith("blob:")) {
+      URL.revokeObjectURL(removedPreview);
+    }
+
+    setImageFiles(nextFiles);
+    setImagePreviews(nextPreviews);
+    setErrors((currentErrors) => ({
+      ...currentErrors,
+      images: nextFiles.length ? "" : "Add at least 1 primary image.",
+    }));
+  };
+
+  const handleMakePrimary = (indexToPromote) => {
+    if (indexToPromote <= 0 || indexToPromote >= imageFiles.length) {
       return;
     }
 
-    if (imagePreview.startsWith("blob:")) {
-      URL.revokeObjectURL(imagePreview);
-    }
-
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    const nextFiles = [...imageFiles];
+    const nextPreviews = [...imagePreviews];
+    const [primaryFile] = nextFiles.splice(indexToPromote, 1);
+    const [primaryPreview] = nextPreviews.splice(indexToPromote, 1);
+    nextFiles.unshift(primaryFile);
+    nextPreviews.unshift(primaryPreview);
+    setImageFiles(nextFiles);
+    setImagePreviews(nextPreviews);
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const nextErrors = validateForm(formData);
+    const nextErrors = validateForm({
+      ...formData,
+      imageFiles,
+    });
 
     setErrors(nextErrors);
 
@@ -111,18 +152,16 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
       },
     };
 
-    const result = await onAddItem(newItem, imageFile);
+    const result = await onAddItem(newItem, imageFiles);
     if (!result?.ok) {
       return;
     }
 
+    revokePreviewUrls(imagePreviews);
     setFormData(initialFormState);
     setErrors({});
-    setImageFile(null);
-    if (imagePreview.startsWith("blob:")) {
-      URL.revokeObjectURL(imagePreview);
-    }
-    setImagePreview("");
+    setImageFiles([]);
+    setImagePreviews([]);
   };
 
   return (
@@ -133,8 +172,8 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
           <h2>Post an item in a minute</h2>
         </div>
         <p>
-          Share the basics, add a photo link, and your listing appears instantly
-          for nearby students to discover.
+          Add between 1 and 3 photos, keep the best one first as the primary image,
+          and your listing appears instantly for nearby students to discover.
         </p>
       </div>
 
@@ -216,18 +255,38 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
           </div>
         </div>
 
-        <label className="form-field form-field-wide">
-          <span>Upload image</span>
+        <label className={errors.images ? "form-field form-field-wide has-error" : "form-field form-field-wide"}>
+          <span>Upload images</span>
           <input
             type="file"
             accept="image/*"
+            multiple
             onChange={handleImageChange}
           />
+          <small>Choose 1 to 3 images. The first image is the primary cover photo.</small>
+          {errors.images ? <small className="form-field-error">{errors.images}</small> : null}
         </label>
 
-        {imagePreview ? (
+        {imagePreviews.length > 0 ? (
           <div className="image-upload-preview">
-            <img src={imagePreview} alt="Listing preview" />
+            {imagePreviews.map((preview, index) => (
+              <div key={preview + '-' + index} className="image-upload-preview-item">
+                <SmartImage src={preview} alt={`Listing preview ${index + 1}`} />
+                <div className="image-upload-preview-actions">
+                  <strong>{index === 0 ? "Primary image" : `Image ${index + 1}`}</strong>
+                  <div>
+                    {index > 0 ? (
+                      <button type="button" className="secondary-btn" onClick={() => handleMakePrimary(index)}>
+                        Make primary
+                      </button>
+                    ) : null}
+                    <button type="button" className="secondary-btn" onClick={() => handleRemoveImage(index)}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
 

@@ -1,9 +1,12 @@
-import { useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
+import SmartImage from "./SmartImage";
 import {
   hasValidationErrors,
   validatePrice,
   validateRequiredText,
 } from "../utils/validation";
+
+const MAX_IMAGES = 3;
 
 function MyListingsScreen({
   products,
@@ -25,44 +28,78 @@ function MyListingsScreen({
     price: "",
     description: "",
     listingState: "active",
-    image: "",
+    images: [],
   });
   const [editErrors, setEditErrors] = useState({});
-  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImageFiles, setEditImageFiles] = useState([]);
+  const [editImagePreviews, setEditImagePreviews] = useState([]);
+  const editImagePreviewsRef = useRef([]);
 
-  const startEditing = (product) => {
-    setEditingId(product.id);
-    setEditForm({
-      title: product.title,
-      price: String(product.price),
-      description: product.description,
-      listingState: product.listingState ?? "active",
-      image: product.image,
+  const revokePreviewUrls = (previews) => {
+    previews.forEach((preview) => {
+      if (String(preview).startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
     });
-    setEditErrors({});
-    setEditImageFile(null);
   };
 
-  const cancelEditing = () => {
-    if (editForm.image.startsWith("blob:")) {
-      URL.revokeObjectURL(editForm.image);
-    }
+  useEffect(() => {
+    editImagePreviewsRef.current = editImagePreviews;
+  }, [editImagePreviews]);
+
+  useEffect(() => () => revokePreviewUrls(editImagePreviewsRef.current), []);
+
+  const getProductImages = (product) => {
+    const gallery = Array.isArray(product.gallery) && product.gallery.length > 0
+      ? product.gallery
+      : product.image
+        ? [product.image]
+        : [];
+
+    return gallery.slice(0, MAX_IMAGES);
+  };
+
+  const resetEditState = () => {
     setEditingId(null);
     setEditForm({
       title: "",
       price: "",
       description: "",
       listingState: "active",
-      image: "",
+      images: [],
     });
     setEditErrors({});
-    setEditImageFile(null);
+    setEditImageFiles([]);
+    setEditImagePreviews([]);
+  };
+
+  const startEditing = (product) => {
+    revokePreviewUrls(editImagePreviews);
+    const productImages = getProductImages(product);
+
+    setEditingId(product.id);
+    setEditForm({
+      title: product.title,
+      price: String(product.price),
+      description: product.description,
+      listingState: product.listingState ?? "active",
+      images: productImages,
+    });
+    setEditErrors({});
+    setEditImageFiles([]);
+    setEditImagePreviews(productImages);
+  };
+
+  const cancelEditing = () => {
+    revokePreviewUrls(editImagePreviews);
+    resetEditState();
   };
 
   const validateEditForm = (values) => ({
     title: validateRequiredText(values.title, "Title", 3),
     price: validatePrice(values.price),
     description: validateRequiredText(values.description, "Description", 20),
+    images: values.images?.length ? "" : "Keep at least 1 primary image.",
   });
 
   const handleEditChange = (event) => {
@@ -81,19 +118,76 @@ function MyListingsScreen({
   };
 
   const handleImageUpload = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = Array.from(event.target.files ?? []).slice(0, MAX_IMAGES);
+    if (files.length === 0) {
       return;
     }
-    setEditImageFile(file);
+
+    revokePreviewUrls(editImagePreviews);
+    const previews = files.map((file) => URL.createObjectURL(file));
+
+    setEditImageFiles(files);
+    setEditImagePreviews(previews);
     setEditForm((current) => ({
       ...current,
-      image: URL.createObjectURL(file),
+      images: previews,
+    }));
+    setEditErrors((current) => ({
+      ...current,
+      images: "",
+    }));
+    event.target.value = "";
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    const removedPreview = editImagePreviews[indexToRemove];
+    if (String(removedPreview).startsWith("blob:")) {
+      URL.revokeObjectURL(removedPreview);
+    }
+
+    const nextFiles = editImageFiles.filter((_, index) => index !== indexToRemove);
+    const nextPreviews = editImagePreviews.filter((_, index) => index !== indexToRemove);
+
+    setEditImageFiles(nextFiles);
+    setEditImagePreviews(nextPreviews);
+    setEditForm((current) => ({
+      ...current,
+      images: nextPreviews,
+    }));
+    setEditErrors((current) => ({
+      ...current,
+      images: nextPreviews.length ? "" : "Keep at least 1 primary image.",
+    }));
+  };
+
+  const handleMakePrimary = (indexToPromote) => {
+    if (indexToPromote <= 0 || indexToPromote >= editImagePreviews.length) {
+      return;
+    }
+
+    const nextFiles = [...editImageFiles];
+    const nextPreviews = [...editImagePreviews];
+    const [primaryPreview] = nextPreviews.splice(indexToPromote, 1);
+    nextPreviews.unshift(primaryPreview);
+
+    if (nextFiles.length === nextPreviews.length) {
+      const [primaryFile] = nextFiles.splice(indexToPromote, 1);
+      nextFiles.unshift(primaryFile);
+    }
+
+    setEditImageFiles(nextFiles);
+    setEditImagePreviews(nextPreviews);
+    setEditForm((current) => ({
+      ...current,
+      images: nextPreviews,
     }));
   };
 
   const handleSaveEdit = async (productId) => {
-    const nextErrors = validateEditForm(editForm);
+    const nextErrors = validateEditForm({
+      ...editForm,
+      images: editImagePreviews,
+    });
 
     setEditErrors(nextErrors);
 
@@ -108,9 +202,9 @@ function MyListingsScreen({
         price: Number(editForm.price),
         description: editForm.description.trim(),
         listingState: editForm.listingState,
-        image: editForm.image,
+        images: editImagePreviews,
       },
-      editImageFile,
+      editImageFiles,
     );
     if (result?.ok) {
       cancelEditing();
@@ -159,8 +253,12 @@ function MyListingsScreen({
         <div className="my-listings-grid">
           {ownedListings.map((product) => (
             <article key={product.id} className="my-listing-card">
-              <img
-                src={editingId === product.id ? editForm.image : product.image}
+              <SmartImage
+                src={
+                  editingId === product.id
+                    ? editImagePreviews[0]
+                    : (product.imageVariants?.card ?? product.image)
+                }
                 alt={product.title}
                 className="my-listing-image"
               />
@@ -218,10 +316,37 @@ function MyListingsScreen({
                       ) : null}
                     </label>
 
-                    <label className="form-field">
-                      <span>Update image</span>
-                      <input type="file" accept="image/*" onChange={handleImageUpload} />
+                    <label className={editErrors.images ? "form-field has-error" : "form-field"}>
+                      <span>Update images</span>
+                      <input type="file" accept="image/*" multiple onChange={handleImageUpload} />
+                      <small>Choose up to 3 replacement images. The first image is primary.</small>
+                      {editErrors.images ? (
+                        <small className="form-field-error">{editErrors.images}</small>
+                      ) : null}
                     </label>
+
+                    {editImagePreviews.length > 0 ? (
+                      <div className="image-upload-preview">
+                        {editImagePreviews.map((preview, index) => (
+                          <div key={preview + index} className="image-upload-preview-item">
+                            <SmartImage src={preview} alt={`${product.title} edit preview ${index + 1}`} />
+                            <div className="image-upload-preview-actions">
+                              <strong>{index === 0 ? "Primary image" : `Image ${index + 1}`}</strong>
+                              <div>
+                                {index > 0 ? (
+                                  <button type="button" className="secondary-btn" onClick={() => handleMakePrimary(index)}>
+                                    Make primary
+                                  </button>
+                                ) : null}
+                                <button type="button" className="secondary-btn" onClick={() => handleRemoveImage(index)}>
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
 
                     <label className={editErrors.description ? "form-field has-error" : "form-field"}>
                       <span>Description</span>

@@ -16,14 +16,27 @@ import MessagesScreen from "../components/MessagesScreen";
 import MyListingsScreen from "../components/MyListingsScreen";
 import UserProfileScreen from "../components/UserProfileScreen";
 import ToastViewport from "../components/ToastViewport";
+import PaginationControls from "../components/PaginationControls";
+import AuthScreen from "../components/AuthScreen";
 import { ApiError, apiClient, normalizeThread, sessionStore } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 
 const ProductModal = lazy(() => import("../components/ProductModal"));
 const SellItemForm = lazy(() => import("../components/SellItemForm"));
-const AuthScreen = lazy(() => import("../components/AuthScreen"));
 
 const SAVED_ITEMS_STORAGE_KEY = "kibu-market-saved-items";
+const LISTINGS_PAGE_LIMIT = 12;
+const THREADS_PAGE_LIMIT = 10;
+const MESSAGES_PAGE_LIMIT = 20;
+const SAVED_ITEMS_PAGE_LIMIT = 6;
+const DEFAULT_PAGINATION = {
+  page: 1,
+  limit: LISTINGS_PAGE_LIMIT,
+  total: 0,
+  totalPages: 1,
+  hasNextPage: false,
+  hasPrevPage: false,
+};
 
 function readStoredJson(key, fallbackValue) {
   try {
@@ -51,6 +64,10 @@ function getThreadSortTime(thread) {
 
 function sortThreadsByLatest(threads) {
   return [...threads].sort((a, b) => getThreadSortTime(b) - getThreadSortTime(a));
+}
+
+function createPaginationState(overrides = {}) {
+  return { ...DEFAULT_PAGINATION, ...overrides };
 }
 
 function mergeUniqueMessages(currentMessages = [], incomingMessages = []) {
@@ -102,6 +119,23 @@ function replaceProduct(products, nextProduct) {
     : [nextProduct, ...products];
 
   return sortProductsByLatest(nextProducts);
+}
+
+function mergeProductCollections(existingProducts, incomingProducts) {
+  const productMap = new Map(existingProducts.map((product) => [String(product.id), product]));
+
+  incomingProducts.forEach((product) => {
+    if (!product?.id) {
+      return;
+    }
+
+    productMap.set(String(product.id), {
+      ...(productMap.get(String(product.id)) ?? {}),
+      ...product,
+    });
+  });
+
+  return Array.from(productMap.values());
 }
 
 function upsertThread(currentThreads, incomingThread, { messageMode = "preserve" } = {}) {
@@ -241,7 +275,11 @@ function CategoryIcon({ type }) {
 
 function Home() {
   const [products, setProducts] = useState([]);
+  const [marketProducts, setMarketProducts] = useState([]);
   const [threads, setThreads] = useState([]);
+  const [productsPagination, setProductsPagination] = useState(createPaginationState());
+  const [threadsPagination, setThreadsPagination] = useState(createPaginationState({ limit: THREADS_PAGE_LIMIT }));
+  const [messagePaginationByThread, setMessagePaginationByThread] = useState({});
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [sortBy, setSortBy] = useState("latest");
@@ -262,7 +300,11 @@ function Home() {
   const [isMessageSending, setIsMessageSending] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState([]);
   const [typingByConversation, setTypingByConversation] = useState({});
+  const [isLoadingMoreThreads, setIsLoadingMoreThreads] = useState(false);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const [savedItemsPage, setSavedItemsPage] = useState(1);
   const listingsSectionRef = useRef(null);
+  const hasInitializedListingFiltersRef = useRef(false);
   const socketToken = sessionStore.getToken();
 
   useEffect(() => {
@@ -286,6 +328,10 @@ function Home() {
   }, [savedItems]);
 
   useEffect(() => {
+    setSavedItemsPage(1);
+  }, [savedItems.length]);
+
+  useEffect(() => {
     const controller = new AbortController();
 
     const loadAppData = async () => {
@@ -295,8 +341,8 @@ function Home() {
       const token = sessionStore.getToken();
 
       try {
-        const [fetchedProducts, fetchedUser, fetchedThreads] = await Promise.all([
-          apiClient.getProducts(controller.signal),
+        const [productsPage, fetchedUser, threadsPage] = await Promise.all([
+          apiClient.getProductsPage({ signal: controller.signal, page: 1, limit: LISTINGS_PAGE_LIMIT }),
           token
             ? apiClient.getCurrentUser(controller.signal).catch((error) => {
                 if (error instanceof ApiError && error.status === 401) {
@@ -308,20 +354,24 @@ function Home() {
               })
             : Promise.resolve(null),
           token
-            ? apiClient.getThreads(controller.signal).catch((error) => {
+            ? apiClient.getThreadsPage({ signal: controller.signal, page: 1, limit: THREADS_PAGE_LIMIT }).catch((error) => {
                 if (error instanceof ApiError && error.status === 401) {
                   sessionStore.clear();
-                  return [];
+                  return { items: [], pagination: createPaginationState({ limit: THREADS_PAGE_LIMIT }) };
                 }
 
                 throw error;
               })
-            : Promise.resolve([]),
+            : Promise.resolve({ items: [], pagination: createPaginationState({ limit: THREADS_PAGE_LIMIT }) }),
         ]);
 
         setCurrentUser(fetchedUser);
-        setThreads(sortThreadsByLatest(fetchedThreads));
-        setProducts(mergeProductsWithThreads(fetchedProducts, fetchedThreads));
+        setMarketProducts(productsPage.items);
+        setThreads(sortThreadsByLatest(threadsPage.items));
+        setThreadsPagination(threadsPage.pagination ?? createPaginationState({ limit: THREADS_PAGE_LIMIT, total: threadsPage.items.length }));
+        setProducts(mergeProductsWithThreads(productsPage.items, threadsPage.items));
+        setProductsPagination(productsPage.pagination ?? createPaginationState({ total: productsPage.items.length }));
+        setMessagePaginationByThread({});
       } catch (error) {
         if (controller.signal.aborted || isAbortError(error)) {
           return;
@@ -452,7 +502,7 @@ function Home() {
       }
 
       const nextThread = normalizeThread(payload.conversation);
-      applyThreadUpdate(nextThread, { messageMode: "preserve" });
+      applyThreadUpdate(nextThread, { messageMode: "replace" });
       removeTypingState(nextThread.id);
     },
     onMessageNew: (payload) => {
@@ -483,8 +533,8 @@ function Home() {
     activePage === "login" ||
     activePage === "signup";
   const categories = useMemo(
-    () => ["All", ...new Set(products.map((product) => product.category))],
-    [products],
+    () => ["All", ...new Set(marketProducts.map((product) => product.category))],
+    [marketProducts],
   );
   const unreadMessageCount = useMemo(
     () =>
@@ -495,42 +545,92 @@ function Home() {
     [currentUser, threads],
   );
 
+  const sortByToApiSort = (value) => {
+    switch (value) {
+      case "price-low":
+        return "price_asc";
+      case "price-high":
+        return "price_desc";
+      case "title":
+        return "title_asc";
+      default:
+        return "latest";
+    }
+  };
+
+  const loadProductsPage = async ({ page = 1, signal } = {}) => {
+    const result = await apiClient.getProductsPage({
+      signal,
+      page,
+      limit: LISTINGS_PAGE_LIMIT,
+      search: deferredQuery.trim() || undefined,
+      category: activeCategory === "All" ? undefined : activeCategory,
+      sort: sortByToApiSort(sortBy),
+      status: "active",
+    });
+
+    setMarketProducts(result.items);
+    setProducts((currentProducts) => mergeProductsWithThreads(mergeProductCollections(currentProducts, result.items), threads));
+    setProductsPagination(result.pagination ?? createPaginationState({ total: result.items.length }));
+  };
+
+  useEffect(() => {
+    if (!hasInitializedListingFiltersRef.current) {
+      hasInitializedListingFiltersRef.current = true;
+      return;
+    }
+
+    const controller = new AbortController();
+
+    loadProductsPage({ page: 1, signal: controller.signal }).catch((error) => {
+      if (controller.signal.aborted || isAbortError(error)) {
+        return;
+      }
+
+      showToast({
+        type: "error",
+        title: "Listings unavailable",
+        message: error instanceof Error ? error.message : "We could not refresh marketplace results.",
+      });
+    });
+
+    return () => controller.abort();
+  }, [activeCategory, deferredQuery, sortBy]);
+
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const recentlyPostedProducts = sortProductsByLatest(products).slice(0, 4);
-  let visibleProducts = products.filter((product) => {
-    if (blockedSellerIds.includes(product.seller?.id)) {
-      return false;
-    }
-
-    if ((product.listingState ?? "active") !== "active") {
-      return false;
-    }
-
-    const matchesCategory = activeCategory === "All" || product.category === activeCategory;
-    const matchesQuery =
-      normalizedQuery.length === 0 ||
-      [product.title, product.category, product.location, ...(product.tags ?? [])]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery);
-
-    return matchesCategory && matchesQuery;
+  const recentlyPostedProducts = sortProductsByLatest(marketProducts).slice(0, 4);
+  const visibleProducts = marketProducts.filter((product) => !blockedSellerIds.includes(product.seller?.id));
+  const savedProducts = products.filter((product) => savedItems.includes(product.id));
+  const savedItemsPagination = createPaginationState({
+    page: savedItemsPage,
+    limit: SAVED_ITEMS_PAGE_LIMIT,
+    total: savedProducts.length,
+    totalPages: Math.max(1, Math.ceil(savedProducts.length / SAVED_ITEMS_PAGE_LIMIT)),
+    hasPrevPage: savedItemsPage > 1,
+    hasNextPage: savedItemsPage < Math.max(1, Math.ceil(savedProducts.length / SAVED_ITEMS_PAGE_LIMIT)),
   });
-
-  if (sortBy === "price-low") {
-    visibleProducts = [...visibleProducts].sort((a, b) => a.price - b.price);
-  } else if (sortBy === "price-high") {
-    visibleProducts = [...visibleProducts].sort((a, b) => b.price - a.price);
-  } else if (sortBy === "title") {
-    visibleProducts = [...visibleProducts].sort((a, b) => a.title.localeCompare(b.title));
-  } else {
-    visibleProducts = sortProductsByLatest(visibleProducts);
-  }
+  const pagedSavedProducts = savedProducts.slice(
+    (savedItemsPage - 1) * SAVED_ITEMS_PAGE_LIMIT,
+    savedItemsPage * SAVED_ITEMS_PAGE_LIMIT,
+  );
 
   const handleSearchChange = (nextValue) => {
     startTransition(() => {
       setQuery(nextValue);
     });
+  };
+
+  const handleListingsPageChange = async (page) => {
+    try {
+      await loadProductsPage({ page });
+      listingsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Listings unavailable",
+        message: error instanceof Error ? error.message : "We could not change the marketplace page.",
+      });
+    }
   };
 
   const dismissToast = (toastId) => {
@@ -579,12 +679,33 @@ function Home() {
     requireSellerSession("sell");
   };
 
-  const openMyListingsPage = () => {
-    requireSellerSession("my-listings");
+  const loadSellerListings = async () => {
+    if (!currentUser) {
+      return;
+    }
+
+    try {
+      const myProducts = await apiClient.getMyProducts();
+      setProducts((currentProducts) => mergeProductCollections(currentProducts, myProducts));
+    } catch {
+      // Keep existing catalog if seller listings refresh fails.
+    }
   };
 
-  const openProfilePage = () => {
-    requireSellerSession("profile");
+  const openMyListingsPage = async () => {
+    if (!requireSellerSession("my-listings")) {
+      return;
+    }
+
+    await loadSellerListings();
+  };
+
+  const openProfilePage = async () => {
+    if (!requireSellerSession("profile")) {
+      return;
+    }
+
+    await loadSellerListings();
   };
 
   const openMessagesPage = () => {
@@ -611,19 +732,18 @@ function Home() {
     listingsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const handleAddItem = async (item, imageFile) => {
+  const handleAddItem = async (item, imageFiles = []) => {
     setIsListingSubmitting(true);
 
     try {
-      const uploadedImageUrl = imageFile ? await apiClient.uploadFile(imageFile) : "";
+      const uploadedImageUrls = await apiClient.uploadFiles(imageFiles);
       const createdProduct = await apiClient.createProduct({
         ...item,
-        image:
-          uploadedImageUrl ||
-          "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=900&q=80",
+        images: uploadedImageUrls,
       });
 
       setProducts((currentProducts) => replaceProduct(currentProducts, createdProduct));
+      setMarketProducts((currentProducts) => replaceProduct(currentProducts, createdProduct));
       setActiveCategory("All");
       setSortBy("latest");
       setQuery("");
@@ -661,6 +781,9 @@ function Home() {
     try {
       await apiClient.deleteProduct(productId);
       setProducts((currentProducts) =>
+        currentProducts.filter((product) => product.id !== productId),
+      );
+      setMarketProducts((currentProducts) =>
         currentProducts.filter((product) => product.id !== productId),
       );
       setThreads((currentThreads) =>
@@ -719,6 +842,7 @@ function Home() {
       });
 
       setProducts((currentProducts) => replaceProduct(currentProducts, updatedProduct));
+      setMarketProducts((currentProducts) => replaceProduct(currentProducts, updatedProduct));
 
       showToast({
         type: "success",
@@ -743,13 +867,19 @@ function Home() {
     setPendingActionId(`${productId}:update`);
 
     try {
-      const uploadedImageUrl = imageFile ? await apiClient.uploadFile(imageFile) : "";
+      const nextImageFiles = Array.isArray(imageFile)
+        ? imageFile.filter(Boolean).slice(0, 3)
+        : imageFile
+          ? [imageFile]
+          : [];
+      const uploadedImageUrls = await apiClient.uploadFiles(nextImageFiles);
       const updatedProduct = await apiClient.updateProduct(productId, {
         ...updates,
-        ...(uploadedImageUrl ? { image: uploadedImageUrl } : {}),
+        ...(uploadedImageUrls.length > 0 ? { images: uploadedImageUrls } : {}),
       });
 
       setProducts((currentProducts) => replaceProduct(currentProducts, updatedProduct));
+      setMarketProducts((currentProducts) => replaceProduct(currentProducts, updatedProduct));
 
       if (selectedProduct?.id === productId) {
         setSelectedProduct(updatedProduct);
@@ -881,11 +1011,13 @@ function Home() {
         email: loginForm.email.trim().toLowerCase(),
         password: loginForm.password,
       });
-      const nextThreads = await apiClient.getThreads();
+      const nextThreadsPage = await apiClient.getThreadsPage({ page: 1, limit: THREADS_PAGE_LIMIT });
 
       setCurrentUser(user);
-      setThreads(sortThreadsByLatest(nextThreads));
-      setProducts((currentProducts) => mergeProductsWithThreads(currentProducts, nextThreads));
+      setThreads(sortThreadsByLatest(nextThreadsPage.items));
+      setThreadsPagination(nextThreadsPage.pagination ?? createPaginationState({ limit: THREADS_PAGE_LIMIT, total: nextThreadsPage.items.length }));
+      setProducts((currentProducts) => mergeProductsWithThreads(currentProducts, nextThreadsPage.items));
+      setMessagePaginationByThread({});
       setTypingByConversation({});
       setActivePage("market");
       showToast({
@@ -907,15 +1039,25 @@ function Home() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (!currentUser) {
       return;
     }
 
     const userName = currentUser.name;
-    sessionStore.clear();
+
+    try {
+      await apiClient.logout();
+    } catch {
+      sessionStore.clear();
+    }
+
     setCurrentUser(null);
+    setMarketProducts([]);
     setThreads([]);
+    setThreadsPagination(createPaginationState({ limit: THREADS_PAGE_LIMIT }));
+    setProductsPagination(createPaginationState());
+    setMessagePaginationByThread({});
     setOnlineUserIds([]);
     setTypingByConversation({});
     setSelectedMessageProductId(null);
@@ -934,17 +1076,21 @@ function Home() {
     }
 
     try {
+      let joinedThread = null;
       if (isSocketConnected) {
         const response = await joinConversation(threadId);
         if (response?.conversation) {
-          const nextThread = normalizeThread(response.conversation);
-          applyThreadUpdate(nextThread, { messageMode: "replace" });
-          return { ok: true, thread: nextThread };
+          joinedThread = normalizeThread(response.conversation);
+          applyThreadUpdate(joinedThread, { messageMode: "replace" });
         }
       }
 
-      const messages = await apiClient.getThreadMessages(threadId);
-      applyThreadUpdate({ id: threadId, messages }, { messageMode: "replace" });
+      const messagePage = await apiClient.getThreadMessagesPage(threadId, { page: 1, limit: MESSAGES_PAGE_LIMIT });
+      applyThreadUpdate({ id: threadId, messages: messagePage.items }, { messageMode: "replace" });
+      setMessagePaginationByThread((current) => ({
+        ...current,
+        [threadId]: messagePage.pagination ?? createPaginationState({ limit: MESSAGES_PAGE_LIMIT, total: messagePage.items.length }),
+      }));
       return { ok: true };
     } catch (error) {
       return {
@@ -969,13 +1115,69 @@ function Home() {
     }
   };
 
+  const handleLoadMoreThreads = async () => {
+    if (!threadsPagination.hasNextPage || isLoadingMoreThreads) {
+      return;
+    }
+
+    setIsLoadingMoreThreads(true);
+
+    try {
+      const nextPage = await apiClient.getThreadsPage({
+        page: threadsPagination.page + 1,
+        limit: THREADS_PAGE_LIMIT,
+      });
+
+      setThreads((currentThreads) => sortThreadsByLatest([...currentThreads, ...nextPage.items]));
+      setThreadsPagination(nextPage.pagination ?? threadsPagination);
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Conversations unavailable",
+        message: error instanceof Error ? error.message : "We could not load more conversations.",
+      });
+    } finally {
+      setIsLoadingMoreThreads(false);
+    }
+  };
+
+  const handleLoadOlderMessages = async (threadId) => {
+    const pagination = messagePaginationByThread[threadId];
+    if (!threadId || !pagination?.hasNextPage || isLoadingOlderMessages) {
+      return;
+    }
+
+    setIsLoadingOlderMessages(true);
+
+    try {
+      const nextPage = await apiClient.getThreadMessagesPage(threadId, {
+        page: pagination.page + 1,
+        limit: pagination.limit || MESSAGES_PAGE_LIMIT,
+      });
+
+      applyThreadUpdate({ id: threadId, messages: nextPage.items }, { messageMode: "append" });
+      setMessagePaginationByThread((current) => ({
+        ...current,
+        [threadId]: nextPage.pagination ?? pagination,
+      }));
+    } catch (error) {
+      showToast({
+        type: "error",
+        title: "Messages unavailable",
+        message: error instanceof Error ? error.message : "We could not load older messages.",
+      });
+    } finally {
+      setIsLoadingOlderMessages(false);
+    }
+  };
+
   const handleMarkThreadRead = async (threadId) => {
     try {
       const updatedThread = isSocketConnected
         ? normalizeThread((await markConversationReadSocket(threadId)).conversation)
         : await apiClient.markThreadRead(threadId);
 
-      applyThreadUpdate(updatedThread, { messageMode: "preserve" });
+      applyThreadUpdate(updatedThread, { messageMode: "replace" });
       removeTypingState(threadId);
 
       return { ok: true, thread: updatedThread };
@@ -1192,7 +1394,7 @@ function Home() {
 
               <div className="desktop-side-summary">
                 <div>
-                  <span>{products.length}</span>
+                  <span>{productsPagination.total}</span>
                   <small>Total items</small>
                 </div>
                 <div>
@@ -1237,6 +1439,9 @@ function Home() {
                 key={currentUser?.id ?? "profile"}
                 products={products}
                 savedItems={savedItems}
+                savedProducts={pagedSavedProducts}
+                savedItemsPagination={savedItemsPagination}
+                onSavedItemsPageChange={setSavedItemsPage}
                 userProfile={currentUser}
                 currentUser={currentUser}
                 onBack={scrollToListings}
@@ -1259,6 +1464,11 @@ function Home() {
                 typingByConversation={typingByConversation}
                 onlineUserIds={onlineUserIds}
                 isSending={isMessageSending}
+                hasMoreThreads={threadsPagination.hasNextPage}
+                onLoadMoreThreads={handleLoadMoreThreads}
+                messagePaginationByThread={messagePaginationByThread}
+                isLoadingOlderMessages={isLoadingOlderMessages}
+                onLoadOlderMessages={handleLoadOlderMessages}
               />
             ) : activePage === "login" || activePage === "signup" ? (
               <Suspense fallback={<PageLoader label="Loading account page..." />}>
@@ -1289,7 +1499,7 @@ function Home() {
                         query={query}
                         onQueryChange={handleSearchChange}
                         resultCount={visibleProducts.length}
-                        totalCount={products.length}
+                        totalCount={productsPagination.total}
                       />
 
                       <div className="market-controls">
@@ -1337,6 +1547,11 @@ function Home() {
                         onSaveToggle={handleSaveToggle}
                         onViewDetails={setSelectedProduct}
                         onQuickChat={openMessagesForProduct}
+                      />
+                      <PaginationControls
+                        pagination={productsPagination}
+                        onPageChange={handleListingsPageChange}
+                        label="listings"
                       />
                     </section>
 
@@ -1442,3 +1657,4 @@ function MarketSkeleton() {
 }
 
 export default Home;
+
