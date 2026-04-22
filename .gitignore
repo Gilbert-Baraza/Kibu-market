@@ -1,0 +1,3 @@
+backend/tests/
+frontend/src/test/
+frontend/src/**/__tests__/
