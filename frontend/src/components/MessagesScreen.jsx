@@ -553,7 +553,7 @@ function MessagesScreen({
                         </div>
                         <div className="messenger-thread-line messenger-thread-line-meta">
                           <span className="messenger-thread-product">
-                            {thread.roleLabel} � {thread.product.title}
+                            {thread.roleLabel} • {thread.product.title}
                           </span>
                           {unreadCount > 0 ? (
                             <span className="messenger-unread-dot" aria-label={`${unreadCount} unread messages`} />

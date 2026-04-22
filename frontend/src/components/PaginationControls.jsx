@@ -19,7 +19,7 @@ function PaginationControls({
         Previous
       </button>
       <span className="pagination-summary">
-        Page {pagination.page} of {pagination.totalPages} • {pagination.total} {label}
+        Page {pagination.page} of {pagination.totalPages} â€¢ {pagination.total} {label}
       </span>
       <button
         type="button"

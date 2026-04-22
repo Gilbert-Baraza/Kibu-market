@@ -145,7 +145,7 @@ function ChatConversation({
         <div className="messenger-product-copy">
           <span className="messenger-product-kicker">{roleContextLabel}</span>
           <strong>{product.title}</strong>
-          <p>{product.location} • KES {Number(product.price ?? 0).toLocaleString()}</p>
+          <p>{product.location} - KES {Number(product.price ?? 0).toLocaleString()}</p>
         </div>
       </div>
 
