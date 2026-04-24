@@ -27,6 +27,7 @@
 - `REFRESH_TOKEN_EXPIRES_IN`
 - `JWT_EXPIRES_IN`
 - `CLIENT_URL`
+- `CLIENT_URLS`
 - `TRUST_PROXY`
 - `BODY_SIZE_LIMIT`
 - `UPLOAD_MAX_BYTES`
@@ -42,6 +43,12 @@
 - Uploads now use Cloudinary automatically when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` are set.
 - `CLOUDINARY_FOLDER` is optional and defaults to `kibu-market`.
 - If Cloudinary is not configured, the backend keeps using local `uploads/` storage so development still works without external credentials.
+
+## CORS notes
+
+- `CLIENT_URL` can be a single frontend origin such as `https://kibu-market.vercel.app`.
+- `CLIENT_URLS` can contain a comma-separated list of allowed frontend origins for environments like production plus preview deployments.
+- If a configured origin uses the `*.vercel.app` hostname, matching preview URLs for that project are also allowed automatically.
 ## Audit Logging
 
 - The backend now emits structured audit log entries for sensitive actions such as login, profile updates, logout, and listing deletion.

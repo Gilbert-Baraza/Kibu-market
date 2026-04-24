@@ -8,17 +8,14 @@ import { fileURLToPath } from "url";
 import env from "./config/env.js";
 import apiRoutes from "./routes/index.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import ApiError from "./utils/ApiError.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
-const allowedOrigins = new Set([
-  env.clientUrl,
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-]);
+const allowedOrigins = new Set(env.clientUrls);
 
 function isAllowedOrigin(origin) {
   if (!origin) {
@@ -26,6 +23,10 @@ function isAllowedOrigin(origin) {
   }
 
   if (allowedOrigins.has(origin)) {
+    return true;
+  }
+
+  if (env.clientOriginRegexes.some((pattern) => pattern.test(origin))) {
     return true;
   }
 
@@ -43,7 +44,7 @@ app.use(
         return;
       }
 
-      callback(new Error(`CORS blocked for origin: ${origin}`));
+      callback(new ApiError(403, `CORS blocked for origin: ${origin}`));
     },
     credentials: true,
   }),
