@@ -42,7 +42,7 @@ const env = {
     Boolean(cloudinaryApiSecret),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX) || 5,
   authRateLimitWindowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 60000,
-  chatRateLimitMax: Number(process.env.CHAT_RATE_LIMIT_MAX) || 20,
+  chatRateLimitMax: Number(process.env.CHAT_RATE_LIMIT_MAX) || 60,
   chatRateLimitWindowMs: Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS) || 60000,
   listingRateLimitMax: Number(process.env.LISTING_RATE_LIMIT_MAX) || 10,
   listingRateLimitWindowMs: Number(process.env.LISTING_RATE_LIMIT_WINDOW_MS) || 60000,
