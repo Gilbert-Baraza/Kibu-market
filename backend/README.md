@@ -27,7 +27,6 @@
 - `REFRESH_TOKEN_EXPIRES_IN`
 - `JWT_EXPIRES_IN`
 - `CLIENT_URL`
-- `CLIENT_URLS`
 - `TRUST_PROXY`
 - `BODY_SIZE_LIMIT`
 - `UPLOAD_MAX_BYTES`
@@ -46,9 +45,8 @@
 
 ## CORS notes
 
-- `CLIENT_URL` can be a single frontend origin such as `https://kibu-market.vercel.app`.
-- `CLIENT_URLS` can contain a comma-separated list of allowed frontend origins for environments like production plus preview deployments.
-- If a configured origin uses the `*.vercel.app` hostname, matching preview URLs for that project are also allowed automatically.
+- Set `CLIENT_URL` to the single frontend origin that should be allowed to call the backend, for example `https://kibu-market.vercel.app`.
+- The backend does not hardcode a fallback frontend URL, so `CLIENT_URL` should be set in each environment.
 ## Audit Logging
 
 - The backend now emits structured audit log entries for sensitive actions such as login, profile updates, logout, and listing deletion.

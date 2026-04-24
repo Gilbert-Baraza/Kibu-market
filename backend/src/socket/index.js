@@ -7,7 +7,7 @@ import { registerPresence, unregisterPresence } from "./presence.js";
 export function createSocketServer(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: [...env.clientUrls, ...env.clientOriginRegexes],
+      origin: env.clientUrl,
       credentials: true,
     },
   });

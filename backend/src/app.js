@@ -15,22 +15,12 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-const allowedOrigins = new Set(env.clientUrls);
-
 function isAllowedOrigin(origin) {
   if (!origin) {
     return true;
   }
 
-  if (allowedOrigins.has(origin)) {
-    return true;
-  }
-
-  if (env.clientOriginRegexes.some((pattern) => pattern.test(origin))) {
-    return true;
-  }
-
-  return /^https?:\/\/(localhost|127\.0\.0\.1):(51\d{2}|4173)$/.test(origin);
+  return Boolean(env.clientUrl) && origin === env.clientUrl;
 }
 
 app.disable("x-powered-by");
