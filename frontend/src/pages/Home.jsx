@@ -182,6 +182,10 @@ function isAbortError(error) {
   return error?.name === "AbortError" || error?.code === 20;
 }
 
+function isRateLimitError(error) {
+  return error instanceof ApiError && error.status === 429;
+}
+
 function getThreadUnreadCountForUser(thread, currentUser) {
   if (!currentUser || !thread) {
     return 0;
@@ -360,6 +364,15 @@ function Home() {
                   return { items: [], pagination: createPaginationState({ limit: THREADS_PAGE_LIMIT }) };
                 }
 
+                if (isRateLimitError(error)) {
+                  return {
+                    items: [],
+                    pagination: createPaginationState({ limit: THREADS_PAGE_LIMIT }),
+                    rateLimited: true,
+                    error,
+                  };
+                }
+
                 throw error;
               })
             : Promise.resolve({ items: [], pagination: createPaginationState({ limit: THREADS_PAGE_LIMIT }) }),
@@ -372,6 +385,14 @@ function Home() {
         setProducts(mergeProductsWithThreads(productsPage.items, threadsPage.items));
         setProductsPagination(productsPage.pagination ?? createPaginationState({ total: productsPage.items.length }));
         setMessagePaginationByThread({});
+
+        if (threadsPage.rateLimited) {
+          showToast({
+            type: "error",
+            title: "Messages temporarily limited",
+            message: threadsPage.error?.message ?? "Chat requests are being rate limited right now.",
+          });
+        }
       } catch (error) {
         if (controller.signal.aborted || isAbortError(error)) {
           return;

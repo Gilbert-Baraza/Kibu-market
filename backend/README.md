@@ -30,6 +30,12 @@
 - `TRUST_PROXY`
 - `BODY_SIZE_LIMIT`
 - `UPLOAD_MAX_BYTES`
+- `AUTH_RATE_LIMIT_MAX`
+- `AUTH_RATE_LIMIT_WINDOW_MS`
+- `CHAT_RATE_LIMIT_MAX`
+- `CHAT_RATE_LIMIT_WINDOW_MS`
+- `LISTING_RATE_LIMIT_MAX`
+- `LISTING_RATE_LIMIT_WINDOW_MS`
 - `CLOUDINARY_CLOUD_NAME`
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
@@ -47,6 +53,11 @@
 
 - Set `CLIENT_URL` to the single frontend origin that should be allowed to call the backend, for example `https://kibu-market.vercel.app`.
 - The backend does not hardcode a fallback frontend URL, so `CLIENT_URL` should be set in each environment.
+
+## Rate limiting notes
+
+- Chat routes default to `CHAT_RATE_LIMIT_MAX=60` requests per `CHAT_RATE_LIMIT_WINDOW_MS=60000`.
+- If your deployed frontend polls inbox data or users read/send messages frequently, increase those values in your deployment environment as needed.
 ## Audit Logging
 
 - The backend now emits structured audit log entries for sensitive actions such as login, profile updates, logout, and listing deletion.
