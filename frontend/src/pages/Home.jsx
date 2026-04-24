@@ -1541,14 +1541,6 @@ function Home() {
                         </label>
                       </div>
 
-                      <div className="marketplace-section-heading marketplace-list-heading">
-                        <div>
-                          <span className="section-label">Recently posted</span>
-                          <h2>Fresh listings from campus sellers</h2>
-                        </div>
-                        <p>Browse fast, message faster, and close deals before someone else does.</p>
-                      </div>
-
                       <ProductList
                         key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
                         products={visibleProducts}

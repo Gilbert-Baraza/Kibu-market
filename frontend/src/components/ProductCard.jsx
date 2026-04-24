@@ -11,7 +11,20 @@ function formatRelativeTime(value) {
   }
 
   const diffMs = Date.now() - timestamp;
-  const diffHours = Math.max(1, Math.floor(diffMs / (1000 * 60 * 60)));
+  if (diffMs <= 0) {
+    return "Just now";
+  }
+
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  if (diffMinutes < 1) {
+    return "Just now";
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
 
   if (diffHours < 24) {
     return `${diffHours}h ago`;
