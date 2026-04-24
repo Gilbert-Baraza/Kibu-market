@@ -19,6 +19,11 @@ import {
   startConversationForListing,
 } from "../services/chatService.js";
 import ApiError from "../utils/ApiError.js";
+import {
+  getConversationMessages as getHydratedConversationMessages,
+  hydrateConversation,
+  serializeConversation,
+} from "../socket/serializers.js";
 
 const router = Router();
 
@@ -55,22 +60,14 @@ router.post(
       text,
     });
 
-    const refreshedConversation = await Conversation.findById(conversation._id)
-      .populate({
-        path: "product",
-        select: "title price images image location status seller category description createdAt updatedAt",
-        populate: {
-          path: "seller",
-          select: "name email avatar phone university",
-        },
-      })
-      .populate("buyer seller participants", "name email avatar phone university")
-      .populate("lastSender", "name email avatar");
+    const refreshedConversation = await hydrateConversation(conversation._id);
+    const messages = await getHydratedConversationMessages(conversation._id);
+    const serializedConversation = serializeConversation(refreshedConversation, { messages });
 
     res.status(201).json({
       message: "Conversation started successfully.",
-      conversation: refreshedConversation,
-      data: refreshedConversation,
+      conversation: serializedConversation,
+      data: serializedConversation,
     });
   }),
 );
