@@ -2668,9 +2668,8 @@ main, .navbar {
   }
 
   .toast-viewport {
-    top: auto;
+    top: calc(1rem + env(safe-area-inset-top, 0px));
     right: 1rem;
-    bottom: 1rem;
     left: 1rem;
     width: auto;
   }

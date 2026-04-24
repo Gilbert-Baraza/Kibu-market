@@ -441,7 +441,21 @@ function Home() {
       message,
     };
 
-    setToasts((currentToasts) => [...currentToasts, toast]);
+    setToasts((currentToasts) => {
+      const duplicateToast = currentToasts.find((item) =>
+        item.type === toast.type &&
+        item.title === toast.title &&
+        item.message === toast.message,
+      );
+
+      if (duplicateToast) {
+        return currentToasts.map((item) =>
+          item.id === duplicateToast.id ? { ...item, id: toast.id } : item,
+        );
+      }
+
+      return [...currentToasts, toast];
+    });
   };
 
   const applyThreadUpdate = (incomingThread, options) => {
