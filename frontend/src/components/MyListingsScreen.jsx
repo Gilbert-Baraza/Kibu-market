@@ -98,7 +98,7 @@ function MyListingsScreen({
   const validateEditForm = (values) => ({
     title: validateRequiredText(values.title, "Title", 3),
     price: validatePrice(values.price),
-    description: validateRequiredText(values.description, "Description", 20),
+    description: validateRequiredText(values.description, "Description", 10),
     images: values.images?.length ? "" : "Keep at least 1 primary image.",
   });
 

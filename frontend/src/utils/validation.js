@@ -35,7 +35,7 @@ export function validatePrice(value) {
     return "Price must be greater than zero.";
   }
 
-  if (amount > 10000000) {
+  if (amount > 100000) {
     return "Price looks too high. Please enter a realistic amount.";
   }
 

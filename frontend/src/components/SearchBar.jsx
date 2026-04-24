@@ -1,17 +1,7 @@
-function SearchBar({ query, onQueryChange, resultCount, totalCount }) {
+function SearchBar({ query, onQueryChange }) {
   return (
     <section className="search-section marketplace-search">
       <div className="search-container">
-        <div className="search-header marketplace-search-header">
-          <div className="search-title-area">
-            <span className="section-label">Search faster</span>
-            <h2 className="search-title">Find the item you need in seconds</h2>
-            <p className="search-subtitle">
-              {resultCount} results from {totalCount} live listings across campus
-            </p>
-          </div>
-        </div>
-
         <div className="search-controls">
           <div className="search-input-wrapper search-input-pill">
             <svg className="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
