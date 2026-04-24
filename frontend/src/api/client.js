@@ -20,8 +20,22 @@ function trimTrailingSlash(value) {
   return String(value ?? "").replace(/\/+$/, "");
 }
 
+function normalizeApiBaseUrl(value) {
+  const normalizedValue = trimTrailingSlash(value);
+
+  if (!normalizedValue) {
+    return "";
+  }
+
+  if (/\/api$/i.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return `${normalizedValue}/api`;
+}
+
 function getApiBaseUrl() {
-  return trimTrailingSlash(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL);
+  return normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL);
 }
 
 function readJson(value, fallbackValue) {
