@@ -4494,7 +4494,7 @@ main, .navbar {
 
 @media (max-width: 720px) {
   .messenger-frame {
-    border-radius: 22px;
+    border-radius: 24px;
   }
 
   .messenger-sidebar-header,
@@ -4513,21 +4513,267 @@ main, .navbar {
     display: none;
   }
 
+  .messages-screen.messenger-shell {
+    height: calc(100dvh - 6.35rem);
+    min-height: calc(100dvh - 6.35rem);
+    padding-top: 0.55rem;
+  }
+
+  .messages-screen.messenger-shell .messenger-frame {
+    min-height: 100%;
+    grid-template-columns: 1fr;
+    border-radius: 26px;
+    box-shadow: 0 18px 44px rgba(2, 8, 20, 0.2);
+  }
+
+  .messenger-chat-wrap,
+  .messenger-chat-panel {
+    min-height: 100%;
+  }
+
+  .messenger-chat-header {
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.85rem;
+    padding-bottom: 0.8rem;
+    background: linear-gradient(180deg, rgba(28, 39, 47, 0.98), rgba(24, 34, 41, 0.94));
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .messenger-chat-profile {
+    gap: 0.7rem;
+  }
+
+  .messenger-mobile-back {
+    width: 2.8rem;
+    height: 2.8rem;
+    border-radius: 1rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.04));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .messenger-chat-avatar {
+    width: 3.35rem;
+    height: 3.35rem;
+    border-radius: 1.1rem;
+  }
+
+  .messenger-presence-dot {
+    right: -0.05rem;
+    bottom: 0.05rem;
+  }
+
+  .messenger-profile-copy {
+    gap: 0.12rem;
+  }
+
+  .messenger-profile-copy strong {
+    font-size: 0.98rem;
+    line-height: 1.2;
+  }
+
+  .messenger-profile-copy span {
+    font-size: 0.8rem;
+  }
+
+  .messenger-product-strip {
+    align-items: flex-start;
+    padding-top: 0.8rem;
+    padding-bottom: 0.8rem;
+    margin: 0.65rem 0.8rem 0;
+    padding: 0.85rem 0.95rem;
+    border-radius: 1.15rem;
+    background: linear-gradient(180deg, rgba(18, 28, 35, 0.98), rgba(14, 23, 29, 0.96));
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+  }
+
+  .messenger-product-copy {
+    gap: 0.28rem;
+  }
+
+  .messenger-product-kicker {
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+  }
+
+  .messenger-product-copy strong {
+    font-size: 0.95rem;
+    line-height: 1.3;
+  }
+
+  .messenger-product-copy p {
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .messenger-chat-thread {
+    padding: 1rem 0.9rem 0.75rem;
+  }
+
   ._tmp_sidebar_thread {
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
   }
 
   .messenger-bubble {
-    max-width: 84%;
+    max-width: min(86%, 18rem);
+    padding: 0.68rem 0.78rem 0.52rem;
+    border-radius: 0 16px 16px 16px;
+  }
+
+  .messenger-bubble.mine {
+    border-radius: 16px 0 16px 16px;
+  }
+
+  .messenger-bubble-author {
+    font-size: 0.75rem;
+  }
+
+  .messenger-bubble p {
+    font-size: 0.92rem;
+    line-height: 1.4;
+  }
+
+  .messenger-bubble-time {
+    font-size: 0.72rem;
+  }
+
+  .messenger-day-pill {
+    margin-bottom: 0.8rem;
+    padding: 0.38rem 0.7rem;
+    font-size: 0.72rem;
   }
 
   .messenger-composer {
     grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    align-items: end;
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    padding-top: 0.7rem;
+    padding-bottom: calc(0.8rem + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(27, 38, 45, 0.9), rgba(27, 38, 45, 0.98));
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .messenger-composer-icon:nth-child(2) {
     display: none;
+  }
+
+  .messenger-composer-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.95rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .messenger-composer input {
+    min-height: 2.9rem;
+    padding: 0.8rem 0.95rem;
+    font-size: 0.95rem;
+    border-radius: 1.1rem;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .messenger-send {
+    min-height: 2.9rem;
+    padding: 0.8rem 1rem;
+    font-size: 0.95rem;
+    border-radius: 1.1rem;
+    box-shadow: 0 14px 28px rgba(17, 165, 96, 0.24);
+  }
+}
+
+@media (max-width: 540px) {
+  .messages-screen.messenger-shell {
+    height: calc(100dvh - 6rem);
+    min-height: calc(100dvh - 6rem);
+    padding-top: 0.4rem;
+  }
+
+  .messages-screen.messenger-shell .messenger-frame {
+    border-radius: 22px;
+  }
+
+  .messenger-chat-header,
+  .messenger-composer {
+    padding-left: 0.8rem;
+    padding-right: 0.8rem;
+  }
+
+  .messenger-product-strip {
+    margin-left: 0.7rem;
+    margin-right: 0.7rem;
+    padding: 0.78rem 0.82rem;
+  }
+
+  .messenger-chat-thread {
+    padding: 0.75rem 0.75rem 0.65rem;
+  }
+
+  .messenger-chat-profile {
+    gap: 0.6rem;
+  }
+
+  .messenger-mobile-back {
+    width: 2.55rem;
+    height: 2.55rem;
+  }
+
+  .messenger-chat-avatar {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .messenger-profile-copy strong {
+    font-size: 0.92rem;
+  }
+
+  .messenger-profile-copy span {
+    font-size: 0.76rem;
+  }
+
+  .messenger-product-kicker {
+    font-size: 0.64rem;
+  }
+
+  .messenger-product-copy strong {
+    font-size: 0.9rem;
+  }
+
+  .messenger-product-copy p {
+    font-size: 0.76rem;
+  }
+
+  .messenger-bubble {
+    max-width: min(88%, 16.5rem);
+  }
+
+  .messenger-bubble p {
+    font-size: 0.9rem;
+  }
+
+  .messenger-composer {
+    grid-template-columns: 2.4rem minmax(0, 1fr) auto;
+  }
+
+  .messenger-composer-icon {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .messenger-send {
+    min-width: 4.9rem;
+    padding-left: 0.95rem;
+    padding-right: 0.95rem;
   }
 }
 .messenger-thread {
@@ -5734,7 +5980,7 @@ main, .navbar {
 
 @media (max-width: 980px) {
   .messages-screen.messenger-shell {
-    height: calc(100vh - 7.5rem);
+    height: calc(100dvh - 7rem);
   }
 
   .messages-screen.messenger-shell .messenger-frame {
@@ -5783,12 +6029,13 @@ main, .navbar {
   }
 
   .messages-screen.messenger-shell {
-    height: calc(100vh - 6.75rem);
-    padding-top: 0.75rem;
+    height: calc(100dvh - 6.35rem);
+    padding-top: 0.4rem;
   }
 
   .messages-screen.messenger-shell .messenger-frame {
     min-height: 100%;
+    max-height: 100%;
   }
 
   .hero-preview-list {
