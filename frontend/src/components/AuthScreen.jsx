@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import SmartImage from "./SmartImage";
 import {
+  hasValidationErrors,
+  scrollToFirstValidationError,
   validateEmail,
   validatePhone,
   validateRequiredText,
@@ -31,6 +33,8 @@ function AuthScreen({
   const [errors, setErrors] = useState({});
   const [submitMessage, setSubmitMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const loginFormRef = useRef(null);
+  const signupFormRef = useRef(null);
 
   const isLogin = mode === "login";
 
@@ -66,7 +70,8 @@ function AuthScreen({
     setErrors(nextErrors);
     setSubmitMessage("");
 
-    if (Object.values(nextErrors).some(Boolean)) {
+    if (hasValidationErrors(nextErrors)) {
+      scrollToFirstValidationError(loginFormRef.current);
       return;
     }
 
@@ -86,7 +91,8 @@ function AuthScreen({
     setErrors(nextErrors);
     setSubmitMessage("");
 
-    if (Object.values(nextErrors).some(Boolean)) {
+    if (hasValidationErrors(nextErrors)) {
+      scrollToFirstValidationError(signupFormRef.current);
       return;
     }
 
@@ -227,7 +233,7 @@ function AuthScreen({
             </div>
 
             {isLogin ? (
-              <form className="auth-form" onSubmit={handleLoginSubmit}>
+              <form className="auth-form" onSubmit={handleLoginSubmit} ref={loginFormRef}>
                 <FormField 
                   label="Email address" 
                   name="email" 
@@ -294,7 +300,7 @@ function AuthScreen({
                 </button>
               </form>
             ) : (
-              <form className="auth-form" onSubmit={handleSignupSubmit}>
+              <form className="auth-form" onSubmit={handleSignupSubmit} ref={signupFormRef}>
                 <FormField 
                   label="Username" 
                   name="name" 

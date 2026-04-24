@@ -2,6 +2,7 @@
 import SmartImage from "./SmartImage";
 import {
   hasValidationErrors,
+  scrollToFirstValidationError,
   validatePrice,
   validateRequiredText,
 } from "../utils/validation";
@@ -34,6 +35,7 @@ function MyListingsScreen({
   const [editImageFiles, setEditImageFiles] = useState([]);
   const [editImagePreviews, setEditImagePreviews] = useState([]);
   const editImagePreviewsRef = useRef([]);
+  const editFormRef = useRef(null);
 
   const revokePreviewUrls = (previews) => {
     previews.forEach((preview) => {
@@ -192,6 +194,7 @@ function MyListingsScreen({
     setEditErrors(nextErrors);
 
     if (hasValidationErrors(nextErrors)) {
+      scrollToFirstValidationError(editFormRef.current);
       return;
     }
 
@@ -287,7 +290,7 @@ function MyListingsScreen({
                 </div>
 
                 {editingId === product.id ? (
-                  <div className="my-listing-edit-form">
+                  <div className="my-listing-edit-form" ref={editingId === product.id ? editFormRef : null}>
                     <label className={editErrors.title ? "form-field has-error" : "form-field"}>
                       <span>Title</span>
                       <input
