@@ -6,13 +6,21 @@ function normalizeOrigin(value) {
   return String(value ?? "").trim().replace(/\/+$/, "");
 }
 
+function parseBooleanEnv(value, defaultValue = false) {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  return String(value).trim().toLowerCase() === "true";
+}
+
 const nodeEnv = process.env.NODE_ENV || "development";
 const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME || "";
 const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY || "";
 const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET || "";
 const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || "kibu-market";
-const cloudinaryEnabled = process.env.CLOUDINARY_ENABLED !== "true";
-const cloudinaryRequired = process.env.CLOUDINARY_REQUIRED === "true";
+const cloudinaryEnabled = parseBooleanEnv(process.env.CLOUDINARY_ENABLED, true);
+const cloudinaryRequired = parseBooleanEnv(process.env.CLOUDINARY_REQUIRED, false);
 const clientUrl = normalizeOrigin(process.env.CLIENT_URL);
 
 const env = {
