@@ -1,4 +1,3 @@
-import env from "../config/env.js";
 import ApiError from "../utils/ApiError.js";
 import { persistValidatedImage } from "../services/uploadService.js";
 import { buildImageVariants } from "../utils/imageVariants.js";
@@ -13,10 +12,14 @@ export async function uploadImage(req, res) {
     throw new ApiError(400, "Image file is required.");
   }
 
-  const baseUrl = `${req.protocol}://${req.get("host")}`;
   const savedFiles = await Promise.all(files.map((file) => persistValidatedImage(file)));
   const uploadedFiles = savedFiles.map((savedFile) => {
-    const url = savedFile.url ?? `${baseUrl}/${env.uploadsDir}/${savedFile.filename}`;
+    const url = savedFile.url;
+
+    if (!url) {
+      throw new ApiError(502, "Cloudinary upload did not return an image URL.");
+    }
+
     const variants = savedFile.variants ?? buildImageVariants(url);
 
     return {
