@@ -39,7 +39,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
     title: validateRequiredText(values.title, "Item title", 3),
     price: validatePrice(values.price),
     location: validateRequiredText(values.location, "Pickup location", 3),
-    description: validateRequiredText(values.description, "Description", 5),
+    description: validateRequiredText(values.description, "Description", 10),
     images: values.imageFiles?.length ? "" : "Add at least 1 primary image.",
   });
 

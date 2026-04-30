@@ -252,6 +252,26 @@ function unwrapAccessTokenExpiresAt(payload) {
   return payload?.accessTokenExpiresAt ?? payload?.data?.accessTokenExpiresAt ?? null;
 }
 
+function extractApiErrorMessage(payload, status) {
+  const detailMessage = Array.isArray(payload?.details)
+    ? payload.details.find((detail) => typeof detail?.message === "string" && detail.message.trim())?.message
+    : "";
+  const baseMessage =
+    payload?.message ??
+    payload?.error ??
+    `Request failed with status ${status}.`;
+
+  if (
+    detailMessage &&
+    typeof baseMessage === "string" &&
+    /^validation failed\.?$/i.test(baseMessage.trim())
+  ) {
+    return detailMessage;
+  }
+
+  return baseMessage;
+}
+
 function extractSession(payload) {
   return {
     token: unwrapToken(payload),
@@ -361,10 +381,7 @@ async function request(path, options = {}) {
   }
 
   if (!response.ok) {
-    const message =
-      payload?.message ??
-      payload?.error ??
-      `Request failed with status ${response.status}.`;
+    const message = extractApiErrorMessage(payload, response.status);
 
     if (response.status === 401) {
       clearStoredSession();
