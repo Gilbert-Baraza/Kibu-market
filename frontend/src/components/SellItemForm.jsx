@@ -2,6 +2,7 @@
 import SmartImage from "./SmartImage";
 import {
   hasValidationErrors,
+  scrollToFirstValidationError,
   validatePrice,
   validateRequiredText,
 } from "../utils/validation";
@@ -24,6 +25,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const imagePreviewsRef = useRef([]);
+  const formRef = useRef(null);
 
   const revokePreviewUrls = (previews) => {
     previews.forEach((preview) => {
@@ -37,7 +39,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
     title: validateRequiredText(values.title, "Item title", 3),
     price: validatePrice(values.price),
     location: validateRequiredText(values.location, "Pickup location", 3),
-    description: validateRequiredText(values.description, "Description", 20),
+    description: validateRequiredText(values.description, "Description", 5),
     images: values.imageFiles?.length ? "" : "Add at least 1 primary image.",
   });
 
@@ -130,6 +132,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
     setErrors(nextErrors);
 
     if (hasValidationErrors(nextErrors)) {
+      scrollToFirstValidationError(formRef.current);
       return;
     }
 
@@ -183,7 +186,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
         </button>
       </div>
 
-      <form className="sell-form" onSubmit={handleSubmit}>
+      <form className="sell-form" onSubmit={handleSubmit} ref={formRef}>
         <label className={errors.title ? "form-field form-field-wide has-error" : "form-field form-field-wide"}>
           <span>Item title</span>
           <input

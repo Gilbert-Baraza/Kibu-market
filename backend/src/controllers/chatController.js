@@ -6,6 +6,12 @@ import {
   markConversationAsRead,
   startConversationForListing,
 } from "../services/chatService.js";
+import {
+  getConversationMessages as getHydratedConversationMessages,
+  hydrateConversation,
+  serializeConversation,
+  serializeMessage,
+} from "../socket/serializers.js";
 import { buildPagination } from "../utils/buildPagination.js";
 import { parsePagination } from "../utils/parsePagination.js";
 
@@ -14,11 +20,12 @@ export async function startConversation(req, res) {
     listingId: req.params.listingId,
     currentUserId: req.user._id,
   });
+  const hydratedConversation = await hydrateConversation(conversation._id);
 
   res.status(201).json({
     message: "Conversation ready.",
-    conversation,
-    data: conversation,
+    conversation: serializeConversation(hydratedConversation),
+    data: serializeConversation(hydratedConversation),
   });
 }
 
@@ -39,7 +46,8 @@ export async function getConversations(req, res) {
     Conversation.countDocuments(filters),
   ]);
 
-  res.json({ conversations, data: conversations, pagination: buildPagination(page, limit, total) });
+  const serializedConversations = conversations.map((conversation) => serializeConversation(conversation));
+  res.json({ conversations: serializedConversations, data: serializedConversations, pagination: buildPagination(page, limit, total) });
 }
 
 export async function getConversation(req, res) {
@@ -47,8 +55,9 @@ export async function getConversation(req, res) {
     conversationId: req.params.conversationId,
     userId: req.user._id,
   });
+  const hydratedConversation = await hydrateConversation(conversation._id);
 
-  res.json(conversation);
+  res.json(serializeConversation(hydratedConversation));
 }
 
 export async function getConversationMessages(req, res) {
@@ -69,10 +78,11 @@ export async function getConversationMessages(req, res) {
   ]);
 
   const orderedMessages = [...messages].reverse();
+  const serializedMessages = orderedMessages.map((message) => serializeMessage(message, conversation));
 
   res.json({
-    messages: orderedMessages,
-    data: orderedMessages,
+    messages: serializedMessages,
+    data: serializedMessages,
     pagination: buildPagination(page, limit, total),
   });
 }
@@ -89,16 +99,17 @@ export async function sendConversationMessage(req, res) {
     text: req.body.text,
   });
 
-  const refreshedConversation = await Conversation.findById(conversation._id)
-    .populate("product", "title price images location status seller")
-    .populate("buyer seller participants", "name email avatar phone university")
-    .populate("lastSender", "name email avatar");
+  const refreshedConversation = await hydrateConversation(conversation._id);
+  const conversationMessages = await getHydratedConversationMessages(conversation._id);
+  const serializedConversation = serializeConversation(refreshedConversation, {
+    messages: conversationMessages,
+  });
 
   res.status(201).json({
     message: "Message sent successfully.",
-    conversation: refreshedConversation,
-    sentMessage: message,
-    data: refreshedConversation,
+    conversation: serializedConversation,
+    sentMessage: serializeMessage(message, refreshedConversation),
+    data: serializedConversation,
   });
 }
 
@@ -113,18 +124,13 @@ export async function markConversationRead(req, res) {
     userId: req.user._id,
   });
 
-  const messages = await Message.find({ conversation: updatedConversation._id })
-    .populate("sender", "name email avatar phone university")
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .then((items) => items.reverse());
+  const hydratedConversation = await hydrateConversation(updatedConversation._id);
+  const messages = await getHydratedConversationMessages(updatedConversation._id);
+  const serializedConversation = serializeConversation(hydratedConversation, { messages });
 
   res.json({
     message: "Conversation marked as read.",
-    conversation: {
-      ...(updatedConversation.toJSON ? updatedConversation.toJSON() : updatedConversation),
-      messages,
-    },
+    conversation: serializedConversation,
     data: updatedConversation,
   });
 }

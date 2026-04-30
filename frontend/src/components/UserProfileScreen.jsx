@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import SmartImage from "./SmartImage";
 import PaginationControls from "./PaginationControls";
 import {
   hasValidationErrors,
+  scrollToFirstValidationError,
   validateEmail,
   validatePhone,
   validateRequiredText,
@@ -30,6 +31,7 @@ function UserProfileScreen({
 }) {
   const [formData, setFormData] = useState(userProfile ?? emptyProfile);
   const [errors, setErrors] = useState({});
+  const formRef = useRef(null);
 
   useEffect(() => {
     setFormData(userProfile ?? emptyProfile);
@@ -91,6 +93,7 @@ function UserProfileScreen({
     setErrors(nextErrors);
 
     if (hasValidationErrors(nextErrors)) {
+      scrollToFirstValidationError(formRef.current);
       return;
     }
 
@@ -125,7 +128,7 @@ function UserProfileScreen({
             </div>
           </div>
 
-          <form className="profile-form" onSubmit={handleSubmit}>
+          <form className="profile-form" onSubmit={handleSubmit} ref={formRef}>
             <label className={errors.name ? "form-field has-error" : "form-field"}>
               <span>Full name</span>
               <input

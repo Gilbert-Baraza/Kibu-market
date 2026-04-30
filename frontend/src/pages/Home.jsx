@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import Navbar from "../components/Navbar";
-import Hero from "../components/Hero";
 import SearchBar from "../components/SearchBar";
 import ProductList from "../components/ProductList";
 import MessagesScreen from "../components/MessagesScreen";
@@ -332,6 +331,23 @@ function Home() {
   }, [savedItems]);
 
   useEffect(() => {
+    if (activePage !== "messages") {
+      return undefined;
+    }
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [activePage]);
+
+  useEffect(() => {
     setSavedItemsPage(1);
   }, [savedItems.length]);
 
@@ -425,7 +441,21 @@ function Home() {
       message,
     };
 
-    setToasts((currentToasts) => [...currentToasts, toast]);
+    setToasts((currentToasts) => {
+      const duplicateToast = currentToasts.find((item) =>
+        item.type === toast.type &&
+        item.title === toast.title &&
+        item.message === toast.message,
+      );
+
+      if (duplicateToast) {
+        return currentToasts.map((item) =>
+          item.id === duplicateToast.id ? { ...item, id: toast.id } : item,
+        );
+      }
+
+      return [...currentToasts, toast];
+    });
   };
 
   const applyThreadUpdate = (incomingThread, options) => {
@@ -619,7 +649,6 @@ function Home() {
   }, [activeCategory, deferredQuery, sortBy]);
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const recentlyPostedProducts = sortProductsByLatest(marketProducts).slice(0, 4);
   const visibleProducts = marketProducts.filter((product) => !blockedSellerIds.includes(product.seller?.id));
   const savedProducts = products.filter((product) => savedItems.includes(product.id));
   const savedItemsPagination = createPaginationState({
@@ -1509,12 +1538,6 @@ function Home() {
                   <MarketSkeleton />
                 ) : (
                   <>
-                    <Hero
-                      products={recentlyPostedProducts}
-                      onBrowseClick={scrollToListings}
-                      onSellClick={openSellPage}
-                    />
-
                     <section className="products-section" ref={listingsSectionRef}>
                       <SearchBar
                         query={query}
@@ -1551,14 +1574,6 @@ function Home() {
                             <option value="title">Alphabetical</option>
                           </select>
                         </label>
-                      </div>
-
-                      <div className="marketplace-section-heading marketplace-list-heading">
-                        <div>
-                          <span className="section-label">Recently posted</span>
-                          <h2>Fresh listings from campus sellers</h2>
-                        </div>
-                        <p>Browse fast, message faster, and close deals before someone else does.</p>
                       </div>
 
                       <ProductList
@@ -1623,34 +1638,6 @@ function PageLoader({ label, compact = false }) {
 function MarketSkeleton() {
   return (
     <div className="market-skeleton-shell" aria-hidden="true">
-      <section className="hero hero-marketplace market-skeleton-hero">
-        <div className="hero-content">
-          <div className="skeleton-line skeleton-pill" />
-          <div className="skeleton-line skeleton-heading" />
-          <div className="skeleton-line skeleton-heading skeleton-heading-accent" />
-          <div className="skeleton-line skeleton-body" />
-          <div className="skeleton-line skeleton-body skeleton-body-short" />
-          <div className="market-skeleton-actions">
-            <div className="skeleton-line skeleton-button" />
-            <div className="skeleton-line skeleton-button skeleton-button-secondary" />
-          </div>
-        </div>
-        <div className="hero-preview-shell market-skeleton-preview">
-          <div className="skeleton-line skeleton-card-heading" />
-          <div className="market-skeleton-mini-list">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={`hero-skeleton-${index}`} className="market-skeleton-mini-card">
-                <div className="skeleton-block skeleton-thumb" />
-                <div className="market-skeleton-copy">
-                  <div className="skeleton-line skeleton-mini-title" />
-                  <div className="skeleton-line skeleton-mini-copy" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       <section className="products-section">
         <div className="search-container market-skeleton-search">
           <div className="skeleton-line skeleton-search" />

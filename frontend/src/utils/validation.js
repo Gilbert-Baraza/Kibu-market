@@ -35,7 +35,7 @@ export function validatePrice(value) {
     return "Price must be greater than zero.";
   }
 
-  if (amount > 10000000) {
+  if (amount > 100000) {
     return "Price looks too high. Please enter a realistic amount.";
   }
 
@@ -72,4 +72,33 @@ export function validateEmail(value) {
 
 export function hasValidationErrors(errors) {
   return Object.values(errors).some((message) => !isBlank(message));
+}
+
+export function scrollToFirstValidationError(container) {
+  if (!container) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const firstInvalidField = container.querySelector(
+      '[aria-invalid="true"], .auth-input-error, .has-error input, .has-error textarea, .has-error select, .has-error',
+    );
+
+    if (!(firstInvalidField instanceof HTMLElement)) {
+      return;
+    }
+
+    firstInvalidField.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    const focusTarget = firstInvalidField.matches("input, textarea, select, button")
+      ? firstInvalidField
+      : firstInvalidField.querySelector("input, textarea, select, button");
+
+    if (focusTarget instanceof HTMLElement) {
+      focusTarget.focus({ preventScroll: true });
+    }
+  });
 }
