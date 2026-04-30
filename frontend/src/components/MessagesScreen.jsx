@@ -440,6 +440,14 @@ function MessagesScreen({
   const showChatPanel = !isMobileLayout || showMobileChat;
   const activeTypingState = selectedThread?.id ? typingByConversation[selectedThread.id] : null;
   const selectedThreadPagination = selectedThread?.id ? messagePaginationByThread[selectedThread.id] : null;
+  const selectedThreadRecipientId = selectedThread
+    ? selectedThread.role === "selling"
+      ? selectedThread.buyerId
+      : selectedThread.sellerId
+    : "";
+  const isSelfMessageThread =
+    Boolean(selectedThread && currentUser?.id) &&
+    String(selectedThreadRecipientId) === String(currentUser.id);
 
   return (
     <section className={`messages-screen messenger-shell messenger-theme-${messengerTheme}`}>
@@ -603,6 +611,10 @@ function MessagesScreen({
                 productStatus={selectedThread.productStatus}
                 presenceLabel={selectedThread.presenceLabel}
                 typingLabel={activeTypingState?.userName ?? ""}
+                canSendMessage={!isSelfMessageThread}
+                composerNotice={
+                  isSelfMessageThread ? "You can't send a message to your own listing." : ""
+                }
                 mobile={isMobileLayout}
                 hasOlderMessages={Boolean(selectedThreadPagination?.hasNextPage)}
                 isLoadingOlderMessages={isLoadingOlderMessages}

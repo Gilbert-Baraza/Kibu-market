@@ -67,6 +67,8 @@ function ChatConversation({
   productStatus = "active",
   presenceLabel = "Active listing",
   typingLabel = "",
+  canSendMessage = true,
+  composerNotice = "",
   hasOlderMessages = false,
   isLoadingOlderMessages = false,
   onLoadOlderMessages,
@@ -74,6 +76,7 @@ function ChatConversation({
   const isSelling = role === "selling";
   const firstName = otherParticipantName.split(" ")[0] ?? "them";
   const currentUserMessageRole = isSelling ? "seller" : "buyer";
+  const isComposerDisabled = isSending || !canSendMessage;
   const hasInitializedScrollRef = useRef(false);
   const previousMessageCountRef = useRef(0);
 
@@ -201,13 +204,28 @@ function ChatConversation({
       ) : null}
 
       <div className={mobile ? "messenger-composer mobile-chat-composer" : "messenger-composer"}>
-        <button type="button" className="messenger-composer-icon" aria-label="Add attachment">
+        {composerNotice ? (
+          <p className="messenger-composer-note" role="status">
+            {composerNotice}
+          </p>
+        ) : null}
+        <button
+          type="button"
+          className="messenger-composer-icon"
+          aria-label="Add attachment"
+          disabled={!canSendMessage}
+        >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
         </button>
-        <button type="button" className="messenger-composer-icon" aria-label="Insert emoji">
+        <button
+          type="button"
+          className="messenger-composer-icon"
+          aria-label="Insert emoji"
+          disabled={!canSendMessage}
+        >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <path d="M8 15s1.5 2 4 2 4-2 4-2" />
@@ -220,14 +238,23 @@ function ChatConversation({
           value={draftMessage}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
+            if (event.key === "Enter" && !isComposerDisabled) {
               onSendMessage();
             }
           }}
-          disabled={isSending}
-          placeholder={`Type a message to ${firstName}...`}
+          disabled={isComposerDisabled}
+          placeholder={
+            canSendMessage
+              ? `Type a message to ${firstName}...`
+              : "You can't message your own listing."
+          }
         />
-        <button type="button" className="messenger-send" onClick={onSendMessage} disabled={isSending}>
+        <button
+          type="button"
+          className="messenger-send"
+          onClick={onSendMessage}
+          disabled={isComposerDisabled}
+        >
           {isSending ? "Sending..." : "Send"}
         </button>
       </div>

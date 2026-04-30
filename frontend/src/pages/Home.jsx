@@ -1183,6 +1183,15 @@ function Home() {
   };
 
   const handleSendMessage = async ({ threadId, productId, recipientId, text }) => {
+    if (currentUser?.id && String(recipientId) === String(currentUser.id)) {
+      showToast({
+        type: "error",
+        title: "Message blocked",
+        message: "You can't send a message to your own listing.",
+      });
+      return { ok: false };
+    }
+
     setIsMessageSending(true);
 
     try {
