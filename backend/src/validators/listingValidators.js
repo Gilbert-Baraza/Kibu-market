@@ -84,6 +84,11 @@ const optionalImageInputValidator = createImageInputValidator({
   urlMessage: "Each image must be a valid http(s) URL.",
 });
 
+const tagsValidator = body("tags")
+  .optional()
+  .custom((value) => Array.isArray(value) || typeof value === "string")
+  .withMessage("Tags must be a string or an array.");
+
 export const createListingValidator = [
   body("title").trim().isLength({ min: 3 }).withMessage("Title must be at least 3 characters."),
   body("description")
@@ -96,7 +101,7 @@ export const createListingValidator = [
     .optional()
     .isIn(["new", "like new", "good", "fair", "used"])
     .withMessage("Condition is invalid."),
-  body("tags").optional().isArray().withMessage("Tags must be an array."),
+  tagsValidator,
   requiredImageInputValidator,
   body("location").trim().notEmpty().withMessage("Location is required."),
 ];
@@ -114,7 +119,7 @@ export const updateListingValidator = [
     .optional()
     .isIn(["new", "like new", "good", "fair", "used"])
     .withMessage("Condition is invalid."),
-  body("tags").optional().isArray().withMessage("Tags must be an array."),
+  tagsValidator,
   optionalImageInputValidator,
   body("location").optional().trim().notEmpty().withMessage("Location cannot be empty."),
   body("status").optional().isIn(["active", "sold"]).withMessage("Status is invalid."),

@@ -252,6 +252,40 @@ function unwrapAccessTokenExpiresAt(payload) {
   return payload?.accessTokenExpiresAt ?? payload?.data?.accessTokenExpiresAt ?? null;
 }
 
+function buildProductFormData(product, imageFiles = []) {
+  const formData = new FormData();
+  const selectedFiles = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 3) : [];
+  const scalarFields = [
+    "title",
+    "description",
+    "price",
+    "category",
+    "condition",
+    "location",
+    "listingState",
+    "status",
+  ];
+
+  for (const field of scalarFields) {
+    const value = product?.[field];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      formData.append(field, String(value));
+    }
+  }
+
+  if (Array.isArray(product?.tags)) {
+    for (const tag of product.tags.map((value) => String(value ?? "").trim()).filter(Boolean)) {
+      formData.append("tags", tag);
+    }
+  }
+
+  for (const file of selectedFiles) {
+    formData.append("images", file);
+  }
+
+  return formData;
+}
+
 function extractApiErrorMessage(payload, status) {
   const detailMessage = Array.isArray(payload?.details)
     ? payload.details.find((detail) => typeof detail?.message === "string" && detail.message.trim())?.message
@@ -526,10 +560,13 @@ export const apiClient = {
       pagination: unwrapPagination(payload),
     };
   },
-  async createProduct(product) {
+  async createProduct(product, imageFiles = []) {
+    const selectedFiles = Array.isArray(imageFiles) ? imageFiles.filter(Boolean).slice(0, 3) : [];
     const payload = await request("/products", {
       method: "POST",
-      body: product,
+      body: selectedFiles.length > 0
+        ? buildProductFormData(product, selectedFiles)
+        : product,
     });
     return normalizeProduct(unwrapEntity(payload));
   },

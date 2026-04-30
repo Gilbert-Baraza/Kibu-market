@@ -19,7 +19,13 @@ const initialFormState = {
   tags: "",
 };
 
-function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) {
+function SellItemForm({
+  onAddItem,
+  onBack,
+  currentUser,
+  isSubmitting = false,
+  submitStatusMessage = "",
+}) {
   const [formData, setFormData] = useState(initialFormState);
   const [errors, setErrors] = useState({});
   const [imageFiles, setImageFiles] = useState([]);
@@ -181,7 +187,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
       </div>
 
       <div className="sell-page-actions">
-        <button type="button" className="secondary-btn" onClick={onBack}>
+        <button type="button" className="secondary-btn" onClick={onBack} disabled={isSubmitting}>
           Back to marketplace
         </button>
       </div>
@@ -265,6 +271,7 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
             accept="image/*"
             multiple
             onChange={handleImageChange}
+            disabled={isSubmitting}
           />
           <small>Choose 1 to 3 images. The first image is the primary cover photo.</small>
           {errors.images ? <small className="form-field-error">{errors.images}</small> : null}
@@ -279,11 +286,21 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
                   <strong>{index === 0 ? "Primary image" : `Image ${index + 1}`}</strong>
                   <div>
                     {index > 0 ? (
-                      <button type="button" className="secondary-btn" onClick={() => handleMakePrimary(index)}>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => handleMakePrimary(index)}
+                        disabled={isSubmitting}
+                      >
                         Make primary
                       </button>
                     ) : null}
-                    <button type="button" className="secondary-btn" onClick={() => handleRemoveImage(index)}>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => handleRemoveImage(index)}
+                      disabled={isSubmitting}
+                    >
                       Remove
                     </button>
                   </div>
@@ -320,12 +337,18 @@ function SellItemForm({ onAddItem, onBack, currentUser, isSubmitting = false }) 
         </label>
 
         <div className="sell-form-footer">
-          <div className="sell-note">
-            <strong>Tip</strong>
-            <span>Clear photos and honest descriptions usually get faster replies.</span>
+          <div className={isSubmitting ? "sell-note sell-note-active" : "sell-note"}>
+            <strong>{isSubmitting ? "Publishing now" : "Tip"}</strong>
+            <span>
+              {isSubmitting
+                ? submitStatusMessage || "Working on your listing..."
+                : "Clear photos and honest descriptions usually get faster replies."}
+            </span>
           </div>
           <button type="submit" className="primary-btn" disabled={isSubmitting}>
-            {isSubmitting ? "Publishing..." : "Publish listing"}
+            {isSubmitting
+              ? (submitStatusMessage.includes("Uploading") ? "Uploading images..." : "Publishing listing...")
+              : "Publish listing"}
           </button>
         </div>
       </form>

@@ -22,6 +22,32 @@ function normalizeImages(value) {
   return [...new Set(toArray(value).map((image) => String(image ?? "").trim()).filter(Boolean))];
 }
 
+function normalizeTags(value) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((tag) => String(tag ?? "").trim().toLowerCase()).filter(Boolean))];
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) {
+      return [];
+    }
+
+    try {
+      const parsedValue = JSON.parse(normalizedValue);
+      if (Array.isArray(parsedValue)) {
+        return normalizeTags(parsedValue);
+      }
+    } catch {
+      // Treat plain multipart text fields as a single tag.
+    }
+
+    return [normalizedValue.toLowerCase()];
+  }
+
+  return [];
+}
+
 function collectBodyImages(body) {
   return normalizeImages([
     ...toArray(body.images),
@@ -62,8 +88,11 @@ function normalizeListingPayload(body) {
     "category",
     "condition",
     "location",
-    "tags",
   ]);
+
+  if (body.tags !== undefined) {
+    payload.tags = normalizeTags(body.tags);
+  }
 
   const images = collectBodyImages(body);
   if (images.length > 0) {

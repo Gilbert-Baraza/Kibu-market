@@ -299,6 +299,7 @@ function Home() {
   const [bootstrapError, setBootstrapError] = useState("");
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isListingSubmitting, setIsListingSubmitting] = useState(false);
+  const [listingSubmitStatusMessage, setListingSubmitStatusMessage] = useState("");
   const [pendingActionId, setPendingActionId] = useState(null);
   const [isMessageSending, setIsMessageSending] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState([]);
@@ -784,13 +785,19 @@ function Home() {
 
   const handleAddItem = async (item, imageFiles = []) => {
     setIsListingSubmitting(true);
+    setListingSubmitStatusMessage(
+      imageFiles.length > 0
+        ? `Uploading ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"} and preparing your listing...`
+        : "Publishing your listing...",
+    );
+    const publishStageTimeout = imageFiles.length > 0
+      ? window.setTimeout(() => {
+          setListingSubmitStatusMessage("Finalizing your listing and making it visible in the marketplace...");
+        }, 1800)
+      : null;
 
     try {
-      const uploadedImageUrls = await apiClient.uploadFiles(imageFiles);
-      const createdProduct = await apiClient.createProduct({
-        ...item,
-        images: uploadedImageUrls,
-      });
+      const createdProduct = await apiClient.createProduct(item, imageFiles);
 
       setProducts((currentProducts) => replaceProduct(currentProducts, createdProduct));
       setMarketProducts((currentProducts) => replaceProduct(currentProducts, createdProduct));
@@ -820,6 +827,10 @@ function Home() {
       });
       return { ok: false };
     } finally {
+      if (publishStageTimeout) {
+        window.clearTimeout(publishStageTimeout);
+      }
+      setListingSubmitStatusMessage("");
       setIsListingSubmitting(false);
     }
   };
@@ -1470,6 +1481,7 @@ function Home() {
                   onBack={scrollToListings}
                   currentUser={currentUser}
                   isSubmitting={isListingSubmitting}
+                  submitStatusMessage={listingSubmitStatusMessage}
                 />
               </Suspense>
             ) : activePage === "my-listings" ? (
