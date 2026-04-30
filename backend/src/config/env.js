@@ -22,6 +22,10 @@ const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || "kibu-market";
 const cloudinaryEnabled = parseBooleanEnv(process.env.CLOUDINARY_ENABLED, true);
 const cloudinaryRequired = parseBooleanEnv(process.env.CLOUDINARY_REQUIRED, false);
 const clientUrl = normalizeOrigin(process.env.CLIENT_URL);
+const useCloudinary =
+  Boolean(cloudinaryCloudName)
+  && Boolean(cloudinaryApiKey)
+  && Boolean(cloudinaryApiSecret);
 
 const env = {
   nodeEnv,
@@ -40,21 +44,13 @@ const env = {
   cloudinaryApiKey,
   cloudinaryApiSecret,
   cloudinaryFolder,
-  cloudinaryEnabled,
-  cloudinaryRequired,
-  useCloudinary:
-    nodeEnv !== "test" &&
-    cloudinaryEnabled &&
-    Boolean(cloudinaryCloudName) &&
-    Boolean(cloudinaryApiKey) &&
-    Boolean(cloudinaryApiSecret),
+  useCloudinary,
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX) || 5,
   authRateLimitWindowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 60000,
   chatRateLimitMax: Number(process.env.CHAT_RATE_LIMIT_MAX) || 60,
   chatRateLimitWindowMs: Number(process.env.CHAT_RATE_LIMIT_WINDOW_MS) || 60000,
   listingRateLimitMax: Number(process.env.LISTING_RATE_LIMIT_MAX) || 10,
   listingRateLimitWindowMs: Number(process.env.LISTING_RATE_LIMIT_WINDOW_MS) || 60000,
-  uploadsDir: "uploads",
 };
 
 export default env;

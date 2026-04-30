@@ -1,12 +1,8 @@
-import fs from "fs/promises";
-import path from "path";
 import crypto from "crypto";
 import multer, { MulterError } from "multer";
 import env from "../config/env.js";
 import ApiError from "../utils/ApiError.js";
 import { buildImageVariants } from "../utils/imageVariants.js";
-
-const uploadsRoot = path.resolve(process.cwd(), env.uploadsDir);
 const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const mimeByFormat = {
   jpg: "image/jpeg",
@@ -79,22 +75,6 @@ function createCloudinarySignature(params) {
     .digest("hex");
 }
 
-async function persistLocally(file, format, expectedMimeType) {
-  await fs.mkdir(uploadsRoot, { recursive: true });
-
-  const filename = `${Date.now()}-${crypto.randomUUID()}.${format}`;
-  const filepath = path.join(uploadsRoot, filename);
-  await fs.writeFile(filepath, file.buffer, { flag: "wx" });
-
-  return {
-    provider: "local",
-    filename,
-    filepath,
-    mimetype: expectedMimeType,
-    size: file.size,
-  };
-}
-
 async function persistToCloudinary(file, format, expectedMimeType) {
   const timestamp = Math.floor(Date.now() / 1000);
   const params = {
@@ -163,6 +143,10 @@ export async function persistValidatedImage(file) {
     throw new ApiError(400, "Image file is required.");
   }
 
+  if (!env.useCloudinary) {
+    throw new ApiError(503, "Image uploads require a valid Cloudinary configuration.");
+  }
+
   const format = detectImageFormat(file.buffer);
   if (!format) {
     throw new ApiError(400, "Uploaded file is not a valid supported image.");
@@ -173,21 +157,7 @@ export async function persistValidatedImage(file) {
     throw new ApiError(400, "Uploaded file type does not match the image contents.");
   }
 
-  if (env.useCloudinary) {
-    try {
-      return await persistToCloudinary(file, format, expectedMimeType);
-    } catch (error) {
-      if (env.cloudinaryRequired) {
-        throw error;
-      }
-
-      console.warn("[upload] Cloudinary upload failed; falling back to local storage.", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return persistLocally(file, format, expectedMimeType);
+  return persistToCloudinary(file, format, expectedMimeType);
 }
 
 export function normalizeUploadError(error) {

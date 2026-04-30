@@ -45,9 +45,9 @@
 
 ## Media Storage
 
-- Uploads now use Cloudinary automatically when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` are set.
+- Uploads are Cloudinary-only. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` for `POST /api/uploads` to work.
 - `CLOUDINARY_FOLDER` is optional and defaults to `kibu-market`.
-- If Cloudinary is not configured, the backend keeps using local `uploads/` storage so development still works without external credentials.
+- If Cloudinary credentials are missing, uploads return `503` instead of falling back to local `uploads/` storage.
 
 ## CORS notes
 

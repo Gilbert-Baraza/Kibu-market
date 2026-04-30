@@ -2,16 +2,11 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import path from "path";
 import crypto from "crypto";
-import { fileURLToPath } from "url";
 import env from "./config/env.js";
 import apiRoutes from "./routes/index.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import ApiError from "./utils/ApiError.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -90,15 +85,6 @@ app.use((req, res, next) => {
 
   next();
 });
-
-app.use(
-  `/${env.uploadsDir}`,
-  express.static(path.resolve(__dirname, "..", env.uploadsDir), {
-    fallthrough: false,
-    index: false,
-    maxAge: env.isProduction ? "1d" : 0,
-  }),
-);
 
 app.get("/health", (_req, res) => {
   res.json({
