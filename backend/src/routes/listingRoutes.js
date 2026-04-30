@@ -4,6 +4,7 @@ import validateRequest from "../middleware/validateRequest.js";
 import { requireAuth } from "../middleware/auth.js";
 import { listingWriteRateLimit } from "../middleware/rateLimit.js";
 import { requireListingOwner } from "../middleware/ownership.js";
+import { runImageUploadMiddleware } from "../services/uploadService.js";
 import {
   createListing,
   deleteListing,
@@ -29,6 +30,7 @@ router.post(
   "/",
   requireAuth,
   listingWriteRateLimit,
+  runImageUploadMiddleware,
   createListingValidator,
   validateRequest,
   asyncHandler(createListing),

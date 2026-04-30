@@ -1,6 +1,11 @@
+import path from "path";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 function normalizeOrigin(value) {
   return String(value ?? "").trim().replace(/\/+$/, "");
@@ -19,9 +24,11 @@ const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME || "";
 const cloudinaryApiKey = process.env.CLOUDINARY_API_KEY || "";
 const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET || "";
 const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || "kibu-market";
-const cloudinaryEnabled = parseBooleanEnv(process.env.CLOUDINARY_ENABLED, true);
-const cloudinaryRequired = parseBooleanEnv(process.env.CLOUDINARY_REQUIRED, false);
 const clientUrl = normalizeOrigin(process.env.CLIENT_URL);
+const useCloudinary =
+  Boolean(cloudinaryCloudName)
+  && Boolean(cloudinaryApiKey)
+  && Boolean(cloudinaryApiSecret);
 
 const env = {
   nodeEnv,
@@ -33,21 +40,14 @@ const env = {
   accessTokenExpiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN || process.env.JWT_EXPIRES_IN || "15m",
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "7d",
   clientUrl,
-  trustProxy: process.env.TRUST_PROXY || false,
+  trustProxy: parseBooleanEnv(process.env.TRUST_PROXY, false),
   bodySizeLimit: process.env.BODY_SIZE_LIMIT || "1mb",
   uploadMaxBytes: Number(process.env.UPLOAD_MAX_BYTES) || 5 * 1024 * 1024,
   cloudinaryCloudName,
   cloudinaryApiKey,
   cloudinaryApiSecret,
   cloudinaryFolder,
-  cloudinaryEnabled,
-  cloudinaryRequired,
-  useCloudinary:
-    nodeEnv !== "test" &&
-    cloudinaryEnabled &&
-    Boolean(cloudinaryCloudName) &&
-    Boolean(cloudinaryApiKey) &&
-    Boolean(cloudinaryApiSecret),
+  useCloudinary,
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX) || 5,
   authRateLimitWindowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 60000,
   chatRateLimitMax: Number(process.env.CHAT_RATE_LIMIT_MAX) || 60,

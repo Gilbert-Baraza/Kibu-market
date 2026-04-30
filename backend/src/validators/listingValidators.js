@@ -1,20 +1,88 @@
 import { body, param, query } from "express-validator";
 
-const imageArrayValidator = body("images")
-  .isArray({ min: 1, max: 3 })
-  .withMessage("Listings must include between 1 and 3 images.");
+function toArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
 
-const optionalImageArrayValidator = body("images")
-  .optional()
-  .isArray({ min: 1, max: 3 })
-  .withMessage("Listings can include between 1 and 3 images.");
+  if (value === undefined || value === null) {
+    return [];
+  }
 
-const imageEntriesValidator = body("images.*")
-  .optional()
-  .isString()
-  .trim()
-  .notEmpty()
-  .withMessage("Each image must be a valid URL string.");
+  return [value];
+}
+
+function flattenUploadedFiles(req) {
+  if (!req?.files) {
+    return [];
+  }
+
+  if (Array.isArray(req.files)) {
+    return req.files;
+  }
+
+  return Object.values(req.files).flat();
+}
+
+function collectSubmittedImageUrls(req) {
+  return [...toArray(req.body?.images), ...toArray(req.body?.image)]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+}
+
+function isHttpUrl(value) {
+  try {
+    const url = new URL(String(value));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function createImageInputValidator({
+  required,
+  minMessage,
+  urlMessage,
+}) {
+  return body().custom((_value, { req }) => {
+    const submittedUrls = [...new Set(collectSubmittedImageUrls(req))];
+    const uploadedFiles = [
+      ...(req.file ? [req.file] : []),
+      ...flattenUploadedFiles(req),
+    ];
+    const hasImageInput =
+      uploadedFiles.length > 0
+      || Object.prototype.hasOwnProperty.call(req.body ?? {}, "images")
+      || Object.prototype.hasOwnProperty.call(req.body ?? {}, "image");
+
+    if (!required && !hasImageInput) {
+      return true;
+    }
+
+    const totalImages = submittedUrls.length + uploadedFiles.length;
+    if (totalImages < 1 || totalImages > 3) {
+      throw new Error(minMessage);
+    }
+
+    if (submittedUrls.some((value) => !isHttpUrl(value))) {
+      throw new Error(urlMessage);
+    }
+
+    return true;
+  });
+}
+
+const requiredImageInputValidator = createImageInputValidator({
+  required: true,
+  minMessage: "Listings must include between 1 and 3 images.",
+  urlMessage: "Each image must be a valid http(s) URL.",
+});
+
+const optionalImageInputValidator = createImageInputValidator({
+  required: false,
+  minMessage: "Listings can include between 1 and 3 images.",
+  urlMessage: "Each image must be a valid http(s) URL.",
+});
 
 export const createListingValidator = [
   body("title").trim().isLength({ min: 3 }).withMessage("Title must be at least 3 characters."),
@@ -29,8 +97,7 @@ export const createListingValidator = [
     .isIn(["new", "like new", "good", "fair", "used"])
     .withMessage("Condition is invalid."),
   body("tags").optional().isArray().withMessage("Tags must be an array."),
-  imageArrayValidator,
-  imageEntriesValidator,
+  requiredImageInputValidator,
   body("location").trim().notEmpty().withMessage("Location is required."),
 ];
 
@@ -48,8 +115,7 @@ export const updateListingValidator = [
     .isIn(["new", "like new", "good", "fair", "used"])
     .withMessage("Condition is invalid."),
   body("tags").optional().isArray().withMessage("Tags must be an array."),
-  optionalImageArrayValidator,
-  imageEntriesValidator,
+  optionalImageInputValidator,
   body("location").optional().trim().notEmpty().withMessage("Location cannot be empty."),
   body("status").optional().isIn(["active", "sold"]).withMessage("Status is invalid."),
   body("listingState").optional().isIn(["active", "sold", "draft", "paused"]).withMessage("listingState is invalid."),

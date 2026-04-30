@@ -1,12 +1,10 @@
-import fs from "fs/promises";
-import path from "path";
 import crypto from "crypto";
 import multer, { MulterError } from "multer";
 import env from "../config/env.js";
 import ApiError from "../utils/ApiError.js";
 import { buildImageVariants } from "../utils/imageVariants.js";
 
-const uploadsRoot = path.resolve(process.cwd(), env.uploadsDir);
+const maxUploadFiles = 3;
 const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const mimeByFormat = {
   jpg: "image/jpeg",
@@ -14,6 +12,20 @@ const mimeByFormat = {
   webp: "image/webp",
   gif: "image/gif",
 };
+export const imageUploadFields = [
+  { name: "file", maxCount: 1 },
+  { name: "files", maxCount: maxUploadFiles },
+  { name: "image", maxCount: 1 },
+  { name: "images", maxCount: maxUploadFiles },
+];
+
+function logUploadDebug(message, metadata = {}) {
+  if (!env.isDevelopment) {
+    return;
+  }
+
+  console.info("[upload]", message, metadata);
+}
 
 function startsWithBytes(buffer, bytes) {
   return bytes.every((byte, index) => buffer[index] === byte);
@@ -79,22 +91,6 @@ function createCloudinarySignature(params) {
     .digest("hex");
 }
 
-async function persistLocally(file, format, expectedMimeType) {
-  await fs.mkdir(uploadsRoot, { recursive: true });
-
-  const filename = `${Date.now()}-${crypto.randomUUID()}.${format}`;
-  const filepath = path.join(uploadsRoot, filename);
-  await fs.writeFile(filepath, file.buffer, { flag: "wx" });
-
-  return {
-    provider: "local",
-    filename,
-    filepath,
-    mimetype: expectedMimeType,
-    size: file.size,
-  };
-}
-
 async function persistToCloudinary(file, format, expectedMimeType) {
   const timestamp = Math.floor(Date.now() / 1000);
   const params = {
@@ -113,32 +109,58 @@ async function persistToCloudinary(file, format, expectedMimeType) {
     formData.append("folder", env.cloudinaryFolder);
   }
 
-  const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${env.cloudinaryCloudName}/image/upload`,
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
+  logUploadDebug("Uploading image to Cloudinary.", {
+    filename: file.originalname ?? `upload.${format}`,
+    mimetype: expectedMimeType,
+    size: file.size,
+    folder: env.cloudinaryFolder,
+  });
+
+  let response;
+  try {
+    response = await fetch(
+      `https://api.cloudinary.com/v1_1/${env.cloudinaryCloudName}/image/upload`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+  } catch (error) {
+    logUploadDebug("Cloudinary request failed before a response was received.", {
+      message: error.message,
+    });
+    throw new ApiError(502, "Cloudinary upload request failed.");
+  }
 
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    logUploadDebug("Cloudinary rejected the upload.", {
+      status: response.status ?? null,
+      message: payload?.error?.message ?? null,
+    });
     throw new ApiError(
       502,
       payload?.error?.message || "Cloudinary upload failed.",
     );
   }
 
+  if (!payload.secure_url) {
+    logUploadDebug("Cloudinary response was missing secure_url.", {
+      publicId: payload.public_id ?? null,
+    });
+    throw new ApiError(502, "Cloudinary upload did not return a secure image URL.");
+  }
+
   return {
     provider: "cloudinary",
     filename: payload.public_id,
-    url: payload.secure_url ?? payload.url,
+    url: payload.secure_url,
     mimetype: expectedMimeType,
     size: file.size,
     width: payload.width ?? null,
     height: payload.height ?? null,
-    variants: buildImageVariants(payload.secure_url ?? payload.url),
+    variants: buildImageVariants(payload.secure_url),
   };
 }
 
@@ -146,7 +168,7 @@ export const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: env.uploadMaxBytes,
-    files: 3,
+    files: maxUploadFiles,
   },
   fileFilter: (_req, file, cb) => {
     if (!allowedMimeTypes.has(String(file.mimetype).toLowerCase())) {
@@ -158,9 +180,44 @@ export const upload = multer({
   },
 });
 
+function flattenUploadedFiles(files) {
+  if (!files) {
+    return [];
+  }
+
+  if (Array.isArray(files)) {
+    return files;
+  }
+
+  return Object.values(files).flat();
+}
+
+export function collectUploadedFiles(req, maxFiles = maxUploadFiles) {
+  return [
+    ...(req.file ? [req.file] : []),
+    ...flattenUploadedFiles(req.files),
+  ].filter(Boolean).slice(0, maxFiles);
+}
+
+export function runImageUploadMiddleware(req, res, next) {
+  upload.fields(imageUploadFields)(req, res, (error) => {
+    if (error) {
+      next(normalizeUploadError(error));
+      return;
+    }
+
+    next();
+  });
+}
+
 export async function persistValidatedImage(file) {
   if (!file?.buffer?.length) {
     throw new ApiError(400, "Image file is required.");
+  }
+
+  if (!env.useCloudinary) {
+    logUploadDebug("Cloudinary upload skipped because credentials are incomplete.");
+    throw new ApiError(503, "Image uploads require a valid Cloudinary configuration.");
   }
 
   const format = detectImageFormat(file.buffer);
@@ -173,21 +230,7 @@ export async function persistValidatedImage(file) {
     throw new ApiError(400, "Uploaded file type does not match the image contents.");
   }
 
-  if (env.useCloudinary) {
-    try {
-      return await persistToCloudinary(file, format, expectedMimeType);
-    } catch (error) {
-      if (env.cloudinaryRequired) {
-        throw error;
-      }
-
-      console.warn("[upload] Cloudinary upload failed; falling back to local storage.", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  return persistLocally(file, format, expectedMimeType);
+  return persistToCloudinary(file, format, expectedMimeType);
 }
 
 export function normalizeUploadError(error) {

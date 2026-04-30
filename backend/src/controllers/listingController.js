@@ -1,15 +1,57 @@
 import Listing from "../models/Listing.js";
+import { collectUploadedFiles, persistValidatedImage } from "../services/uploadService.js";
 import { buildPagination } from "../utils/buildPagination.js";
+import ApiError from "../utils/ApiError.js";
 import { parseListingFilters } from "../utils/parseListingFilters.js";
 import { logAuditEvent } from "../utils/auditLogger.js";
 import { pick } from "../utils/pick.js";
 
-function normalizeImages(value) {
-  if (!Array.isArray(value)) {
+function toArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value === undefined || value === null) {
     return [];
   }
 
-  return [...new Set(value.map((image) => String(image ?? "").trim()).filter(Boolean))];
+  return [value];
+}
+
+function normalizeImages(value) {
+  return [...new Set(toArray(value).map((image) => String(image ?? "").trim()).filter(Boolean))];
+}
+
+function collectBodyImages(body) {
+  return normalizeImages([
+    ...toArray(body.images),
+    ...toArray(body.image),
+  ]);
+}
+
+async function resolveListingImages(req) {
+  const uploadedFiles = collectUploadedFiles(req);
+  const bodyImages = collectBodyImages(req.body);
+
+  if (uploadedFiles.length === 0) {
+    return bodyImages;
+  }
+
+  const savedFiles = await Promise.all(uploadedFiles.map((file) => persistValidatedImage(file)));
+  const uploadedUrls = savedFiles.map((savedFile) => {
+    if (!savedFile.url) {
+      throw new ApiError(502, "Cloudinary upload did not return a secure image URL.");
+    }
+
+    return savedFile.url;
+  });
+  const images = normalizeImages([...bodyImages, ...uploadedUrls]);
+
+  if (images.length < 1 || images.length > 3) {
+    throw new ApiError(400, "Listings must include between 1 and 3 images.");
+  }
+
+  return images;
 }
 
 function normalizeListingPayload(body) {
@@ -23,10 +65,9 @@ function normalizeListingPayload(body) {
     "tags",
   ]);
 
-  if (Array.isArray(body.images)) {
-    payload.images = normalizeImages(body.images);
-  } else if (body.image) {
-    payload.images = normalizeImages([body.image]);
+  const images = collectBodyImages(body);
+  if (images.length > 0) {
+    payload.images = images;
   }
 
   if (body.status) {
@@ -45,7 +86,12 @@ function normalizeListingPayload(body) {
 }
 
 export async function createListing(req, res) {
+  const images = await resolveListingImages(req);
   const payload = normalizeListingPayload(req.body);
+
+  if (images.length > 0) {
+    payload.images = images;
+  }
 
   const listing = await Listing.create({
     ...payload,
