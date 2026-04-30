@@ -230,6 +230,7 @@ function SellItemForm({
             <option>Beds & Bedding</option>
             <option>Furniture</option>
             <option>Accessories</option>
+            <option>Utensils</option>
           </select>
         </label>
 
