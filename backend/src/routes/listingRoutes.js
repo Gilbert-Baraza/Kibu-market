@@ -13,7 +13,11 @@ import {
   getMyListings,
   markListingAsSold,
   updateListing,
+  getTrendingListings,
+  getPopularListings,
+  incrementListingViews,
 } from "../controllers/listingController.js";
+
 import {
   createListingValidator,
   listingIdValidator,
@@ -24,8 +28,11 @@ import {
 const router = Router();
 
 router.get("/", listingSearchValidator, validateRequest, asyncHandler(getListings));
+router.get("/trending", asyncHandler(getTrendingListings));
+router.get("/popular", asyncHandler(getPopularListings));
 router.get("/mine", requireAuth, asyncHandler(getMyListings));
 router.get("/:id", listingIdValidator, validateRequest, asyncHandler(getListingById));
+router.get("/:id/view", listingIdValidator, validateRequest, asyncHandler(incrementListingViews));
 router.post(
   "/",
   requireAuth,

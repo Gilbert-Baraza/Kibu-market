@@ -64,6 +64,21 @@ const listingSchema = new mongoose.Schema(
       default: "active",
       index: true,
     },
+    views: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    chatCount: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    saveCount: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -90,5 +105,6 @@ listingSchema.index({ status: 1, price: 1, createdAt: -1 });
 listingSchema.index({ category: 1, status: 1, price: 1 });
 listingSchema.index({ location: 1, status: 1, createdAt: -1 });
 listingSchema.index({ price: 1, status: 1 });
+listingSchema.index({ views: 1, status: 1 });
 
 export default mongoose.model("Listing", listingSchema);

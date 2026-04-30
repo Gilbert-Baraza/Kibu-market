@@ -12,6 +12,12 @@ export async function ensureListingExists(listingId) {
   return listing;
 }
 
+export async function incrementChatCount(listingId) {
+  await Listing.findByIdAndUpdate(listingId, {
+    $inc: { chatCount: 1 },
+  });
+}
+
 export async function startConversationForListing({ listingId, currentUserId }) {
   const listing = await ensureListingExists(listingId);
 
@@ -38,6 +44,9 @@ export async function startConversationForListing({ listingId, currentUserId }) 
       seller: 0,
     },
   });
+
+  // Increment chat count for the listing atomically
+  await incrementChatCount(listing._id);
 
   return Conversation.findById(conversation._id).populate(
     "product buyer seller participants",

@@ -10,6 +10,18 @@ export async function saveListing(req, res) {
     throw new ApiError(404, "Listing not found.");
   }
 
+  // Check if already saved to avoid double counting
+  const user = await User.findById(req.user._id);
+  const alreadySaved = user.savedListings.some(
+    (id) => String(id) === String(listing._id),
+  );
+
+  if (!alreadySaved) {
+    await Listing.findByIdAndUpdate(listing._id, {
+      $inc: { saveCount: 1 },
+    });
+  }
+
   await User.findByIdAndUpdate(req.user._id, {
     $addToSet: { savedListings: listing._id },
   });
@@ -20,6 +32,23 @@ export async function saveListing(req, res) {
 }
 
 export async function unsaveListing(req, res) {
+  const listing = await Listing.findById(req.params.listingId);
+  if (!listing) {
+    throw new ApiError(404, "Listing not found.");
+  }
+
+  // Check if currently saved before decrementing
+  const user = await User.findById(req.user._id);
+  const isCurrentlySaved = user.savedListings.some(
+    (id) => String(id) === String(listing._id),
+  );
+
+  if (isCurrentlySaved) {
+    await Listing.findByIdAndUpdate(listing._id, {
+      $inc: { saveCount: -1 },
+    });
+  }
+
   await User.findByIdAndUpdate(req.user._id, {
     $pull: { savedListings: req.params.listingId },
   });
@@ -36,7 +65,7 @@ export async function getSavedListings(req, res) {
   const pagedIds = savedListingIds.slice(skip, skip + limit);
   const listings = pagedIds.length > 0
     ? await Listing.find({ _id: { $in: pagedIds } })
-      .populate("seller", "name email avatar phone university")
+        .populate("seller", "name email avatar phone university")
     : [];
   const listingMap = new Map(listings.map((listing) => [String(listing._id), listing]));
   const orderedListings = pagedIds

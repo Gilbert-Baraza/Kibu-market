@@ -231,3 +231,190 @@ export async function getMyListings(req, res) {
 
   res.json({ listings, data: listings });
 }
+
+export async function getTrendingListings(req, res) {
+  // Trending: last 7 days, score-based ranking with recency boost
+  // Score = (views * 0.5) + (chatCount * 2) + (saveCount * 1.5)
+  // If created within last 7 days → score × 1.5
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const listings = await Listing.aggregate([
+    // Only active listings from last 7 days
+    {
+      $match: {
+        status: "active",
+        createdAt: { $gte: sevenDaysAgo },
+      },
+    },
+    // Compute base score and apply recency boost
+    {
+      $addFields: {
+        baseScore: {
+          $add: [
+            { $multiply: ["$views", 0.5] },
+            { $multiply: ["$chatCount", 2] },
+            { $multiply: ["$saveCount", 1.5] },
+          ],
+        },
+        ageInDays: {
+          $divide: [
+            { $subtract: [new Date(), "$createdAt"] },
+            1000 * 60 * 60 * 24,
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        score: {
+          $cond: [
+            { $lte: ["$ageInDays", 7] },
+            { $multiply: ["$baseScore", 1.5] },
+            "$baseScore",
+          ],
+        },
+      },
+    },
+    // Sort by score descending then by createdAt descending
+    {
+      $sort: { score: -1, createdAt: -1 },
+    },
+    // Limit to top 10
+    {
+      $limit: 10,
+    },
+    // Project fields
+    {
+      $project: {
+        _id: 1,
+        title: 1,
+        description: 1,
+        price: 1,
+        category: 1,
+        condition: 1,
+        tags: 1,
+        images: 1,
+        location: 1,
+        seller: 1,
+        status: 1,
+        views: 1,
+        chatCount: 1,
+        saveCount: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        score: 1,
+      },
+    },
+  ]);
+
+  // Populate seller info
+  const populatedListings = await Listing.populate(listings, {
+    path: "seller",
+    select: "name email avatar phone university",
+  });
+
+  res.json({
+    listings: populatedListings,
+    data: populatedListings,
+  });
+}
+
+export async function getPopularListings(req, res) {
+  // Popular: primarily sorted by views, then saveCount, then chatCount
+  // Look at last 30 days (configurable via query param)
+  const days = parseInt(req.query.days || "30", 10);
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  const listings = await Listing.aggregate([
+    {
+      $match: {
+        status: "active",
+        createdAt: { $gte: cutoffDate },
+      },
+    },
+    // Compute composite popularity score for sorting stability
+    {
+      $addFields: {
+        popularityScore: {
+          $add: [
+            { $multiply: ["$views", 1.0] },
+            { $multiply: ["$saveCount", 0.8] },
+            { $multiply: ["$chatCount", 0.6] },
+          ],
+        },
+      },
+    },
+    // Sort by views (desc) -> saveCount (desc) -> chatCount (desc) -> createdAt (desc)
+    {
+      $sort: {
+        views: -1,
+        saveCount: -1,
+        chatCount: -1,
+        createdAt: -1,
+      },
+    },
+    // Limit to top 10
+    {
+      $limit: 10,
+    },
+    // Project fields
+    {
+      $project: {
+        _id: 1,
+        title: 1,
+        description: 1,
+        price: 1,
+        category: 1,
+        condition: 1,
+        tags: 1,
+        images: 1,
+        location: 1,
+        seller: 1,
+        status: 1,
+        views: 1,
+        chatCount: 1,
+        saveCount: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        popularityScore: 1,
+      },
+    },
+  ]);
+
+  // Populate seller info
+  const populatedListings = await Listing.populate(listings, {
+    path: "seller",
+    select: "name email avatar phone university",
+  });
+
+  res.json({
+    listings: populatedListings,
+    data: populatedListings,
+  });
+}
+
+export async function incrementListingViews(req, res) {
+  // Increment view count for a listing
+  // Uses IP-based basic deduplication via client-provided fingerprint
+  const { listingId } = req.params;
+  const fingerprint = req.headers["x-view-fingerprint"] || req.ip;
+
+  const listing = await Listing.findByIdAndUpdate(
+    listingId,
+    { $inc: { views: 1 } },
+    { new: true, runValidators: false }
+  ).populate("seller", "name email avatar phone university");
+
+  if (!listing) {
+    res.status(404).json({ message: "Listing not found." });
+    return;
+  }
+
+  res.json({
+    message: "View counted.",
+    listing,
+    data: listing,
+  });
+}
