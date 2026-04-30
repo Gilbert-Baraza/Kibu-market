@@ -1,6 +1,27 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { connectSocket, disconnectSocket, emitWithAck, getSocket } from "../socket/socket";
 
+function isBrowserOnline() {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  return window.navigator.onLine !== false;
+}
+
+function getConnectErrorMessage(error) {
+  if (!isBrowserOnline()) {
+    return null;
+  }
+
+  const message = String(error?.message ?? "").trim();
+  if (!message || message.toLowerCase() === "websocket error") {
+    return "Unable to connect to real-time chat right now.";
+  }
+
+  return message;
+}
+
 export function useSocket({
   enabled,
   token,
@@ -13,6 +34,7 @@ export function useSocket({
   onTypingUpdate,
 }) {
   const [isConnected, setIsConnected] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => isBrowserOnline());
   const handlersRef = useRef({
     onConversationUpdated,
     onConversationReadUpdate,
@@ -22,6 +44,23 @@ export function useSocket({
     onPresenceUpdate,
     onTypingUpdate,
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     handlersRef.current = {
@@ -44,7 +83,8 @@ export function useSocket({
   ]);
 
   useEffect(() => {
-    if (!enabled || !token) {
+    if (!enabled || !token || !isOnline) {
+      setIsConnected(false);
       disconnectSocket();
       return undefined;
     }
@@ -58,7 +98,10 @@ export function useSocket({
     const handleDisconnect = () => setIsConnected(false);
     const handleConnectError = (error) => {
       setIsConnected(false);
-      handlersRef.current.onError?.(error?.message ?? "Unable to connect to real-time chat.");
+      const message = getConnectErrorMessage(error);
+      if (message) {
+        handlersRef.current.onError?.(message);
+      }
     };
     const handleMessageNew = (payload) => handlersRef.current.onMessageNew?.(payload);
     const handleConversationUpdated = (payload) => handlersRef.current.onConversationUpdated?.(payload);
@@ -92,11 +135,12 @@ export function useSocket({
       socket.off("error:event", handleErrorEvent);
       disconnectSocket();
     };
-  }, [enabled, token]);
+  }, [enabled, isOnline, token]);
 
   return {
     socket: getSocket(),
     isConnected,
+    isOnline,
     joinConversation(conversationId) {
       return emitWithAck("conversation:join", { conversationId });
     },

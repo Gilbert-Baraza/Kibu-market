@@ -413,6 +413,7 @@ function Home() {
 
   const {
     isConnected: isSocketConnected,
+    isOnline: isBrowserOnline,
     joinConversation,
     leaveConversation,
     sendMessage: sendSocketMessage,
@@ -491,6 +492,10 @@ function Home() {
       removeTypingState(nextThread.id);
     },
     onError: (message) => {
+      if (typeof window !== "undefined" && window.navigator.onLine === false) {
+        return;
+      }
+
       showToast({
         type: "error",
         title: "Real-time chat error",
@@ -1284,6 +1289,7 @@ function Home() {
         currentUser={currentUser}
         messageCount={unreadMessageCount}
       />
+      {isBrowserOnline ? null : <OfflineBanner />}
       <main className={activePage === "messages" ? "page-main messages-main" : "page-main"}>
         <div
           className={
@@ -1542,6 +1548,23 @@ function PageLoader({ label, compact = false }) {
     <div className={compact ? "page-loader page-loader-compact" : "page-loader"}>
       <div className="page-loader-spinner" aria-hidden="true" />
       <p>{label}</p>
+    </div>
+  );
+}
+
+function OfflineBanner() {
+  return (
+    <div className="offline-banner-shell" role="status" aria-live="polite" aria-atomic="true">
+      <div className="offline-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M2 8.82A15 15 0 0 1 22 8.82" />
+          <path d="M5 12.86a10 10 0 0 1 14 0" />
+          <path d="M8.5 16.43a5 5 0 0 1 7 0" />
+          <line x1="12" y1="20" x2="12.01" y2="20" />
+          <line x1="2" y1="2" x2="22" y2="22" />
+        </svg>
+        <span>You're offline. Chat and marketplace actions will reconnect automatically.</span>
+      </div>
     </div>
   );
 }

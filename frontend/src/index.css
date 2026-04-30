@@ -332,7 +332,7 @@ textarea {
 }
 
 /* Main Container */
-main, .navbar {
+main, .navbar, .offline-banner-shell {
   position: relative;
   z-index: 1;
   width: min(100%, calc(100vw - 1rem));
@@ -378,6 +378,35 @@ main, .navbar {
   gap: 1rem;
   max-width: none;
   margin: 0 auto;
+}
+
+.offline-banner-shell {
+  position: sticky;
+  top: 4.95rem;
+  z-index: 95;
+  margin-top: 0.45rem;
+}
+
+.offline-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 1rem;
+  background: rgba(255, 247, 237, 0.96);
+  color: #9a3412;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.offline-banner svg {
+  flex-shrink: 0;
 }
 
 .navbar-brand-group {
@@ -2774,6 +2803,17 @@ main, .navbar {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(246, 251, 252, 0.88));
     border: 1px solid rgba(148, 163, 184, 0.18);
     box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  }
+
+  .offline-banner-shell {
+    top: 4rem;
+    margin-top: 0.35rem;
+  }
+
+  .offline-banner {
+    padding: 0.62rem 0.75rem;
+    border-radius: 0.95rem;
+    font-size: 0.78rem;
   }
 
   .toast-viewport {

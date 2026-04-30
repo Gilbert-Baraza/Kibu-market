@@ -334,6 +334,14 @@ function shouldRefreshAccessToken() {
   return expiresAt - Date.now() <= ACCESS_TOKEN_REFRESH_BUFFER_MS;
 }
 
+function getNetworkErrorMessage() {
+  if (typeof window !== "undefined" && window.navigator.onLine === false) {
+    return "You're offline. Check your internet connection and try again.";
+  }
+
+  return "We could not reach Kibu Market right now. Please try again.";
+}
+
 async function sendRequest(path, { method = "GET", body, headers, token, signal } = {}) {
   const isFormData = body instanceof FormData;
   const authToken = token ?? getStoredAuthToken();
@@ -349,12 +357,24 @@ async function sendRequest(path, { method = "GET", body, headers, token, signal 
     nextHeaders.set("Authorization", `Bearer ${authToken}`);
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    method,
-    headers: nextHeaders,
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
-    signal,
-  });
+  let response;
+
+  try {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      method,
+      headers: nextHeaders,
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw error;
+    }
+
+    throw new ApiError(getNetworkErrorMessage(), {
+      status: 0,
+    });
+  }
 
   const payload = await parseResponse(response);
   return { response, payload };
