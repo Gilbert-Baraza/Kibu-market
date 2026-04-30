@@ -17,6 +17,7 @@ import UserProfileScreen from "../components/UserProfileScreen";
 import ToastViewport from "../components/ToastViewport";
 import PaginationControls from "../components/PaginationControls";
 import AuthScreen from "../components/AuthScreen";
+import { TrendingCarousel } from "../components/TrendingCarousel";
 import { ApiError, apiClient, normalizeThread, sessionStore } from "../api/client";
 import { useSocket } from "../hooks/useSocket";
 
@@ -1502,29 +1503,42 @@ function Home() {
                         onSortChange={setSortBy}
                       />
 
-                      <ProductList
-                        key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
-                        products={visibleProducts}
-                        savedItems={savedItems}
-                        onSaveToggle={handleSaveToggle}
-                        onViewDetails={setSelectedProduct}
-                        onQuickChat={openMessagesForProduct}
-                      />
-                      <PaginationControls
-                        pagination={productsPagination}
-                        onPageChange={handleListingsPageChange}
-                        label="listings"
-                      />
-                    </section>
+                        <TrendingCarousel
+                          items={visibleProducts.filter((p) => {
+                            const isActive = !p.listingState || p.listingState === "active";
+                            const hasImage = !!p.image || !!(p.images && p.images[0]);
+                            const hasPrice = p.price != null && !Number.isNaN(Number(p.price));
+                            return isActive && hasImage && hasPrice;
+                          }).slice(0, 10).map((p, idx) => ({
+                            ...p,
+                            isTrending: idx < 3,
+                            popularThisWeek: idx >= 3 && idx < 6,
+                          }))}
+                        />
 
-                    <button type="button" className="mobile-sell-fab" onClick={openSellPage}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Sell
-                    </button>
-                  </>
+                       <ProductList
+                         key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
+                         products={visibleProducts}
+                         savedItems={savedItems}
+                         onSaveToggle={handleSaveToggle}
+                         onViewDetails={setSelectedProduct}
+                         onQuickChat={openMessagesForProduct}
+                       />
+                       <PaginationControls
+                         pagination={productsPagination}
+                         onPageChange={handleListingsPageChange}
+                         label="listings"
+                        />
+                      </section>
+
+                      <button type="button" className="mobile-sell-fab" onClick={openSellPage}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Sell
+                      </button>
+                   </>
                 )}
               </>
             )}
