@@ -10,6 +10,15 @@ import ApiError from "./utils/ApiError.js";
 
 const app = express();
 
+if (env.isDevelopment) {
+  console.info("[startup] Cloudinary config", {
+    cloudName: env.cloudinaryCloudName || "<missing>",
+    folder: env.cloudinaryFolder,
+    useCloudinary: env.useCloudinary,
+    uploadMaxBytes: env.uploadMaxBytes,
+  });
+}
+
 function isAllowedOrigin(origin) {
   if (!origin) {
     return true;
