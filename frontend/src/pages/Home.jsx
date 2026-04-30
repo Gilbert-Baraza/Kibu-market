@@ -200,82 +200,6 @@ function getThreadUnreadCountForUser(thread, currentUser) {
   return Number(thread.unreadCount ?? 0);
 }
 
-function getCategoryIcon(category) {
-  switch (String(category).toLowerCase()) {
-    case "all":
-      return "grid";
-    case "electronics":
-      return "device";
-    case "books":
-      return "book";
-    case "furniture":
-      return "home";
-    case "fashion":
-    case "clothing":
-      return "spark";
-    case "hostel":
-    case "hostel items":
-      return "home";
-    default:
-      return "tag";
-  }
-}
-
-function CategoryIcon({ type }) {
-  if (type === "device") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="7" y="2" width="10" height="20" rx="2" />
-        <line x1="11" y1="18" x2="13" y2="18" />
-      </svg>
-    );
-  }
-
-  if (type === "book") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      </svg>
-    );
-  }
-
-  if (type === "home") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 10.5 12 3l9 7.5" />
-        <path d="M5 9.5V21h14V9.5" />
-      </svg>
-    );
-  }
-
-  if (type === "spark") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" />
-      </svg>
-    );
-  }
-
-  if (type === "tag") {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m20.59 13.41-7.18 7.18a2 2 0 0 1-2.82 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-        <line x1="7" y1="7" x2="7.01" y2="7" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-    </svg>
-  );
-}
-
 function Home() {
   const [products, setProducts] = useState([]);
   const [marketProducts, setMarketProducts] = useState([]);
@@ -585,7 +509,7 @@ function Home() {
     activePage === "login" ||
     activePage === "signup";
   const categories = useMemo(
-    () => ["All", ...new Set(marketProducts.map((product) => product.category))],
+    () => ["All", ...new Set(marketProducts.map((product) => product.category).filter(Boolean))],
     [marketProducts],
   );
   const unreadMessageCount = useMemo(
@@ -1556,37 +1480,12 @@ function Home() {
                         onQueryChange={handleSearchChange}
                         resultCount={visibleProducts.length}
                         totalCount={productsPagination.total}
+                        categories={categories}
+                        activeCategory={activeCategory}
+                        onCategoryChange={setActiveCategory}
+                        sortBy={sortBy}
+                        onSortChange={setSortBy}
                       />
-
-                      <div className="market-controls">
-                        <div className="category-filter" aria-label="Filter by category">
-                          {categories.map((category) => (
-                            <button
-                              key={category}
-                              type="button"
-                              className={
-                                category === activeCategory ? "filter-chip active" : "filter-chip"
-                              }
-                              onClick={() => setActiveCategory(category)}
-                            >
-                              <span className="filter-chip-icon">
-                                <CategoryIcon type={getCategoryIcon(category)} />
-                              </span>
-                              <span>{category}</span>
-                            </button>
-                          ))}
-                        </div>
-
-                        <label className="sort-control">
-                          <span>Sort by</span>
-                          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
-                            <option value="latest">Latest</option>
-                            <option value="price-low">Price: low to high</option>
-                            <option value="price-high">Price: high to low</option>
-                            <option value="title">Alphabetical</option>
-                          </select>
-                        </label>
-                      </div>
 
                       <ProductList
                         key={`${activeCategory}-${sortBy}-${normalizedQuery}-${visibleProducts.length}`}
