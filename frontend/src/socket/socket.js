@@ -12,9 +12,8 @@ function createSocket(token) {
   socketUrl = getSocketUrl();
   socketInstance = io(socketUrl, {
     autoConnect: false,
-    transports: ["websocket", "polling"],
+    transports: ["polling", "websocket"],
     upgrade: true,
-    rememberUpgrade: true,
     auth: {
       token,
     },
