@@ -133,7 +133,6 @@ export function useSocket({
       socket.off("presence:update", handlePresenceUpdate);
       socket.off("typing:update", handleTypingUpdate);
       socket.off("error:event", handleErrorEvent);
-      disconnectSocket();
     };
   }, [enabled, isOnline, token]);
 
