@@ -105,6 +105,19 @@ export function TrendingCarousel({ items = [], className = "" }) {
                 alt={item.title || "Product"}
                 className="compact-image"
               />
+              {(item.isTrending || item.popularThisWeek) && (
+                <div className="compact-content">
+                  <h3 className="compact-title" title={item.title}>
+                    {formatTitle(item.title)}
+                  </h3>
+                  <p className="compact-price">{formatPrice(item.price)}</p>
+                  {item.location && (
+                    <p className="compact-location" title={item.location}>
+                      {item.location}
+                    </p>
+                  )}
+                </div>
+              )}
               {item.isTrending && (
                 <span className="compact-badge" aria-label="Trending">
                   🔥
@@ -114,18 +127,6 @@ export function TrendingCarousel({ items = [], className = "" }) {
                 <span className="compact-badge compact-badge-alt" aria-label="Popular">
                   ⭐
                 </span>
-              )}
-            </div>
-
-            <div className="compact-body">
-              <h3 className="compact-title" title={item.title}>
-                {formatTitle(item.title)}
-              </h3>
-              <p className="compact-price">{formatPrice(item.price)}</p>
-              {item.location && (
-                <p className="compact-location" title={item.location}>
-                  {item.location}
-                </p>
               )}
             </div>
           </article>
