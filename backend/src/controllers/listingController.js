@@ -127,7 +127,7 @@ export async function createListing(req, res) {
     seller: req.user._id,
   });
 
-  const populatedListing = await listing.populate("seller", "name email avatar phone university");
+  const populatedListing = await listing.populate("seller", "name email avatar phone university rating");
 
   res.status(201).json({
     message: "Listing created successfully.",
@@ -143,7 +143,7 @@ export async function getListings(req, res) {
 
   const [listings, total] = await Promise.all([
     Listing.find(filters)
-      .populate("seller", "name email avatar phone university")
+      .populate("seller", "name email avatar phone university rating")
       .sort(sort)
       .skip(skip)
       .limit(limit),
@@ -176,7 +176,7 @@ export async function updateListing(req, res) {
 
   Object.assign(req.listing, updates);
   await req.listing.save();
-  await req.listing.populate("seller", "name email avatar phone university");
+  await req.listing.populate("seller", "name email avatar phone university rating");
 
   res.json({
     message: "Listing updated successfully.",
@@ -214,7 +214,7 @@ export async function deleteListing(req, res) {
 export async function markListingAsSold(req, res) {
   req.listing.status = "sold";
   await req.listing.save();
-  await req.listing.populate("seller", "name email avatar phone university");
+  await req.listing.populate("seller", "name email avatar phone university rating");
 
   res.json({
     message: "Listing marked as sold.",
@@ -226,7 +226,7 @@ export async function markListingAsSold(req, res) {
 
 export async function getMyListings(req, res) {
   const listings = await Listing.find({ seller: req.user._id })
-    .populate("seller", "name email avatar phone university")
+    .populate("seller", "name email avatar phone university rating")
     .sort({ createdAt: -1 });
 
   res.json({ listings, data: listings });
@@ -405,7 +405,7 @@ export async function incrementListingViews(req, res) {
     listingId,
     { $inc: { views: 1 } },
     { new: true, runValidators: false }
-  ).populate("seller", "name email avatar phone university");
+  ).populate("seller", "name email avatar phone university rating");
 
   if (!listing) {
     res.status(404).json({ message: "Listing not found." });

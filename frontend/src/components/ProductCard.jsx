@@ -1,4 +1,5 @@
 import SmartImage from "./SmartImage";
+import SellerRatingBadge from "./SellerRatingBadge";
 
 function formatRelativeTime(value) {
   if (!value) {
@@ -65,14 +66,10 @@ function ProductCard({
 
   const getListingStatusLabel = (listingState) => {
     switch (listingState) {
-      case "draft":
-        return "Draft";
-      case "paused":
-        return "Paused";
       case "sold":
         return "Sold";
       default:
-        return "Active";
+        return "Available";
     }
   };
 
@@ -122,6 +119,14 @@ function ProductCard({
         <p className="product-price">{formatPrice(product.price)}</p>
 
         <h3 className="product-title">{product.title}</h3>
+
+        {product.seller?.rating?.count > 0 && (
+          <SellerRatingBadge
+            average={product.seller.rating.average ?? 0}
+            count={product.seller.rating.count ?? 0}
+            size="small"
+          />
+        )}
 
         <div className="product-card-topline">
           <span className="product-location">

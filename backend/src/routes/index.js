@@ -6,6 +6,7 @@ import chatRoutes from "./chatRoutes.js";
 import userRoutes from "./userRoutes.js";
 import uploadRoutes from "./uploadRoutes.js";
 import threadRoutes from "./threadRoutes.js";
+import reviewRoutes from "./reviewRoutes.js";
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use("/chat", chatRoutes);
 router.use("/threads", threadRoutes);
 router.use("/users", userRoutes);
 router.use("/uploads", uploadRoutes);
+router.use("/reviews", reviewRoutes);
 
 export default router;

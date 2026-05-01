@@ -88,6 +88,42 @@ function mergeUniqueMessages(currentMessages = [], incomingMessages = []) {
   });
 }
 
+function applyReadReceiptToMessages(messages = [], { readMessageIds = [], readerId } = {}) {
+  if (!Array.isArray(messages) || messages.length === 0 || readMessageIds.length === 0) {
+    return messages;
+  }
+
+  const normalizedReaderId = readerId ? String(readerId) : "";
+  const readMessageIdSet = new Set(readMessageIds.map((id) => String(id)));
+
+  return messages.map((message) => {
+    if (!readMessageIdSet.has(String(message.id))) {
+      return message;
+    }
+
+    const nextReadBy = normalizedReaderId && !message.readBy.includes(normalizedReaderId)
+      ? [...message.readBy, normalizedReaderId]
+      : message.readBy;
+
+    return {
+      ...message,
+      readBy: nextReadBy,
+      isRead: true,
+    };
+  });
+}
+
+function applyReadReceiptToThread(thread, receipt) {
+  if (!thread) {
+    return thread;
+  }
+
+  return {
+    ...thread,
+    messages: applyReadReceiptToMessages(thread.messages, receipt),
+  };
+}
+
 function mergeProductsWithThreads(products, threads) {
   const productMap = new Map(products.map((product) => [String(product.id), { ...product }]));
 
@@ -136,6 +172,31 @@ function mergeProductCollections(existingProducts, incomingProducts) {
   });
 
   return Array.from(productMap.values());
+}
+
+function updateSellerRatingForProduct(product, sellerId, nextRating) {
+  if (!product?.seller || String(product.seller.id) !== String(sellerId)) {
+    return product;
+  }
+
+  return {
+    ...product,
+    seller: {
+      ...product.seller,
+      rating: nextRating,
+    },
+  };
+}
+
+function updateSellerRatingForThread(thread, sellerId, nextRating) {
+  if (!thread?.product) {
+    return thread;
+  }
+
+  return {
+    ...thread,
+    product: updateSellerRatingForProduct(thread.product, sellerId, nextRating),
+  };
 }
 
 function upsertThread(currentThreads, incomingThread, { messageMode = "preserve" } = {}) {
@@ -214,7 +275,6 @@ function Home() {
   const [savedItems, setSavedItems] = useState(() =>
     readStoredJson(SAVED_ITEMS_STORAGE_KEY, []),
   );
-  const [blockedSellerIds, setBlockedSellerIds] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [activePage, setActivePage] = useState("market");
   const [selectedMessageProductId, setSelectedMessageProductId] = useState(null);
@@ -384,15 +444,20 @@ function Home() {
     });
   };
 
-  const applyThreadUpdate = (incomingThread, options) => {
+  const applyThreadUpdate = (incomingThread, options, receipt) => {
     if (!incomingThread?.id) {
       return;
     }
 
     setThreads((currentThreads) => {
       const nextThreads = upsertThread(currentThreads, incomingThread, options);
-      setProducts((currentProducts) => mergeProductsWithThreads(currentProducts, nextThreads));
-      return nextThreads;
+      const hydratedThreads = receipt?.readMessageIds?.length
+        ? nextThreads.map((thread) =>
+            thread.id === incomingThread.id ? applyReadReceiptToThread(thread, receipt) : thread,
+          )
+        : nextThreads;
+      setProducts((currentProducts) => mergeProductsWithThreads(currentProducts, hydratedThreads));
+      return hydratedThreads;
     });
   };
 
@@ -480,7 +545,7 @@ function Home() {
       }
 
       const nextThread = normalizeThread(payload.conversation);
-      applyThreadUpdate(nextThread, { messageMode: "replace" });
+      applyThreadUpdate(nextThread, { messageMode: "replace" }, payload);
       removeTypingState(nextThread.id);
     },
     onMessageNew: (payload) => {
@@ -580,7 +645,7 @@ function Home() {
   }, [activeCategory, deferredQuery, sortBy]);
 
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const visibleProducts = marketProducts.filter((product) => !blockedSellerIds.includes(product.seller?.id));
+  const visibleProducts = marketProducts;
   const savedProducts = products.filter((product) => savedItems.includes(product.id));
   const savedItemsPagination = createPaginationState({
     page: savedItemsPage,
@@ -959,6 +1024,29 @@ function Home() {
     }
   };
 
+  const handleReviewCreated = ({ product, review }) => {
+    const reviewSeller = review?.sellerId;
+    const sellerId = reviewSeller?.id ?? reviewSeller?._id ?? product?.seller?.id;
+    const nextRating = reviewSeller?.rating;
+
+    if (!sellerId || !nextRating) {
+      return;
+    }
+
+    setProducts((currentProducts) =>
+      currentProducts.map((item) => updateSellerRatingForProduct(item, sellerId, nextRating)),
+    );
+    setMarketProducts((currentProducts) =>
+      currentProducts.map((item) => updateSellerRatingForProduct(item, sellerId, nextRating)),
+    );
+    setThreads((currentThreads) =>
+      currentThreads.map((thread) => updateSellerRatingForThread(thread, sellerId, nextRating)),
+    );
+    setSelectedProduct((currentProduct) =>
+      updateSellerRatingForProduct(currentProduct, sellerId, nextRating),
+    );
+  };
+
   const handleSignup = async (signupForm) => {
     setIsAuthSubmitting(true);
 
@@ -1164,11 +1252,17 @@ function Home() {
 
   const handleMarkThreadRead = async (threadId) => {
     try {
-      const updatedThread = isSocketConnected
-        ? normalizeThread((await markConversationReadSocket(threadId)).conversation)
+      const readResult = isSocketConnected
+        ? await markConversationReadSocket(threadId)
         : await apiClient.markThreadRead(threadId);
+      const updatedThread = applyReadReceiptToThread(
+        isSocketConnected
+          ? normalizeThread(readResult.conversation)
+          : readResult.thread,
+        readResult,
+      );
 
-      applyThreadUpdate(updatedThread, { messageMode: "replace" });
+      applyThreadUpdate(updatedThread, { messageMode: "replace" }, readResult);
       removeTypingState(threadId);
 
       return { ok: true, thread: updatedThread };
@@ -1256,31 +1350,6 @@ function Home() {
     } catch {
       // Ignore transient typing errors.
     }
-  };
-
-  const handleReportListing = (reportedProduct) => {
-    showToast({
-      type: "success",
-      title: "Listing reported",
-      message: `${reportedProduct.title} has been flagged for review.`,
-    });
-  };
-
-  const handleBlockSeller = (blockedProduct) => {
-    const sellerId = blockedProduct.seller?.id;
-    if (!sellerId) {
-      return;
-    }
-
-    setBlockedSellerIds((currentIds) =>
-      currentIds.includes(sellerId) ? currentIds : [...currentIds, sellerId],
-    );
-    setSelectedProduct(null);
-    showToast({
-      type: "success",
-      title: "Seller blocked",
-      message: `${blockedProduct.seller.name}'s listings will no longer appear in your marketplace feed.`,
-    });
   };
 
   return (
@@ -1551,14 +1620,13 @@ function Home() {
           <ProductModal
             key={`${selectedProduct.id}-${selectedProduct.image}`}
             product={selectedProduct}
-            products={products}
             isSaved={savedItems.includes(selectedProduct.id)}
+            currentUser={currentUser}
             onClose={() => setSelectedProduct(null)}
             onSaveToggle={handleSaveToggle}
             onContactSeller={openMessagesForProduct}
-            onReportListing={handleReportListing}
-            onBlockSeller={handleBlockSeller}
-            onSelectRelatedProduct={setSelectedProduct}
+            onReviewCreated={handleReviewCreated}
+            onNotify={showToast}
           />
         </Suspense>
       ) : null}

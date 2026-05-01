@@ -102,19 +102,27 @@ export async function createMessage({ conversation, senderId, text }) {
 export async function markConversationAsRead({ conversation, userId }) {
   const isBuyer = String(conversation.buyer._id ?? conversation.buyer) === String(userId);
   const unreadKey = isBuyer ? "buyer" : "seller";
+  const unreadMessageFilters = {
+    conversation: conversation._id,
+    readBy: { $ne: userId },
+  };
 
-  await Message.updateMany(
-    {
-      conversation: conversation._id,
-      readBy: { $ne: userId },
-    },
-    {
+  const unreadMessageIds = (await Message.find(unreadMessageFilters).select("_id").lean())
+    .map((message) => String(message._id));
+
+  if (unreadMessageIds.length > 0) {
+    await Message.updateMany(unreadMessageFilters, {
       $addToSet: { readBy: userId },
-    },
-  );
+    });
+  }
 
-  conversation.unreadCounts[unreadKey] = 0;
-  await conversation.save();
+  if ((conversation.unreadCounts?.[unreadKey] ?? 0) !== 0) {
+    conversation.unreadCounts[unreadKey] = 0;
+    await conversation.save();
+  }
 
-  return conversation;
+  return {
+    conversation,
+    readMessageIds: unreadMessageIds,
+  };
 }

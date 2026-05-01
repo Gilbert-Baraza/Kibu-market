@@ -1,22 +1,45 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import SmartImage from "./SmartImage";
 import { buildGalleryVariants } from "../utils/imageVariants.js";
+import SellerRatingBadge from "./SellerRatingBadge";
+import RatingModal from "./RatingModal";
+import { apiClient } from "../api/client";
+
+function getRatingBlockedMessage(result) {
+  if (typeof result?.message === "string" && result.message.trim()) {
+    return result.message;
+  }
+
+  switch (result?.reason) {
+    case "self":
+      return "You cannot rate your own listing.";
+    case "already_reviewed":
+      return "You have already reviewed this seller for this listing.";
+    case "no_conversation":
+      return "You can rate a seller after chatting with them about this listing.";
+    case "seller_not_found":
+      return "This seller could not be found.";
+    case "missing_ids":
+      return "We could not confirm the seller or listing for this rating.";
+    default:
+      return "You cannot rate this seller right now.";
+  }
+}
 
 function ProductModal({
   product,
-  products,
   isSaved,
+  currentUser,
   onClose,
   onSaveToggle,
   onContactSeller,
-  onReportListing,
-  onBlockSeller,
-  onSelectRelatedProduct,
+  onReviewCreated,
+  onNotify,
 }) {
   const modalRef = useRef(null);
   const [activeImage, setActiveImage] = useState(product.imageVariants?.detail ?? product.image);
-  const [shareMessage, setShareMessage] = useState("");
-  const [isSellerExpanded, setIsSellerExpanded] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
 
   const galleryImages = useMemo(() => {
     const images = product.gallery?.length ? product.gallery : [product.image];
@@ -31,74 +54,88 @@ function ProductModal({
       card: variantList[index]?.card ?? image,
     }));
   }, [product]);
-  const sellerListings = products.filter((item) => item.seller?.id === product.seller?.id);
-  const activeSellerListings = sellerListings.filter(
-    (item) => item.listingState !== "sold",
-  );
-  const soldSellerListings = sellerListings.filter(
-    (item) => item.listingState === "sold",
-  );
-  const sellerConversations = sellerListings.filter(
-    (item) => (item.messages?.length ?? 0) > 0,
-  );
-  const sellerResponseThreads = sellerConversations.filter((item) => {
-    const messages = item.messages ?? [];
-    const firstBuyerIndex = messages.findIndex((message) => message.sender === "buyer");
-
-    if (firstBuyerIndex === -1) {
-      return messages.some((message) => message.sender === "seller");
-    }
-
-    return messages
-      .slice(firstBuyerIndex + 1)
-      .some((message) => message.sender === "seller");
-  });
-  const sellerResponseRate = sellerConversations.length
-    ? Math.round((sellerResponseThreads.length / sellerConversations.length) * 100)
-    : 100;
-  const sellerProfile = {
-    rating: product.seller.rating ?? "4.8",
-    joined: product.seller.joined ?? "Campus seller",
-    listings: `${activeSellerListings.length} active listings`,
-    activeCount: activeSellerListings.length,
-    soldCount: soldSellerListings.length,
-    responseRate: `${sellerResponseRate}%`,
-  };
-  const relatedProducts = products
-    .filter(
-      (item) =>
-        item.id !== product.id &&
-        (item.category === product.category || item.location === product.location),
-    )
-    .slice(0, 3);
-  const getListingStatusLabel = (listingState) => {
-    switch (listingState) {
-      case "draft":
-        return "Draft";
-      case "paused":
-        return "Paused";
-      case "sold":
-        return "Sold";
-      default:
-        return "Active";
-    }
-  };
-  const getListingStatusMessage = (listingState) => {
-    switch (listingState) {
-      case "draft":
-        return "Saved as draft and hidden from buyers";
-      case "paused":
-        return "Temporarily hidden from buyers";
-      case "sold":
-        return "Marked as sold";
-      default:
-        return "Available right now";
-    }
-  };
 
   useEffect(() => {
     setActiveImage(product.imageVariants?.detail ?? product.image);
   }, [product]);
+
+  const isSeller = currentUser?.id === product?.seller?.id;
+
+  const handleRateSeller = async () => {
+    const sellerId = product?.seller?.id;
+    const listingId = product?.id;
+
+    if (!sellerId || !listingId) {
+      onNotify?.({
+        type: "error",
+        title: "Rating unavailable",
+        message: "We could not confirm the seller or listing for this rating.",
+      });
+      return;
+    }
+
+    try {
+      const result = await apiClient.canReview({
+        sellerId,
+        listingId,
+      });
+      if (result.canReview) {
+        setShowRatingModal(true);
+      } else {
+        onNotify?.({
+          type: "error",
+          title: "Unable to rate seller",
+          message: getRatingBlockedMessage(result),
+        });
+      }
+    } catch (error) {
+      onNotify?.({
+        type: "error",
+        title: "Rating unavailable",
+        message:
+          error instanceof Error
+            ? error.message
+            : "We could not check whether you can rate this seller right now.",
+      });
+    }
+  };
+
+  const handleSubmitReview = async ({ rating, comment }) => {
+    setIsSubmittingReview(true);
+    try {
+      const review = await apiClient.createReview({
+        sellerId: product.seller.id,
+        listingId: product.id,
+        rating,
+        comment,
+      });
+
+      setShowRatingModal(false);
+      onReviewCreated?.({ product, review });
+      onNotify?.({
+        type: "success",
+        title: "Rating submitted",
+        message: `Thanks for rating ${product.seller.name}.`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "We could not submit your rating right now.";
+
+      onNotify?.({
+        type: "error",
+        title: "Rating not submitted",
+        message,
+      });
+
+      if (/already reviewed|cannot rate your own|chatting with them about this listing/i.test(message)) {
+        setShowRatingModal(false);
+      }
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -115,26 +152,6 @@ function ProductModal({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose]);
-
-  const handleShare = async () => {
-    const shareText = `${product.title} - KES ${product.price.toLocaleString()} at ${product.location}`;
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: product.title,
-          text: shareText,
-        });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareText);
-        setShareMessage("Listing details copied.");
-        window.setTimeout(() => setShareMessage(""), 1800);
-      }
-    } catch {
-      setShareMessage("Unable to share right now.");
-      window.setTimeout(() => setShareMessage(""), 1800);
-    }
-  };
 
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">
@@ -198,122 +215,27 @@ function ProductModal({
           <p className="modal-location">{product.location}</p>
           <p className="modal-description">{product.description}</p>
 
-          <div className="modal-tags">
-            {product.tags?.map((tag) => (
-              <span key={tag} className="modal-tag">
-                {tag}
-              </span>
-            ))}
-          </div>
-
-          <div className="modal-meta-grid">
-           {/*  <div>
-              <strong>Seller response</strong>
-              <span>Usually replies within a day</span>
-            </div> */}
-            {/* <div>
-              <strong>Meetup point</strong>
-              <span>{product.location}</span>
-            </div> */}
-            <div>
-              <strong>Payment</strong>
-              <span>M-Pesa or cash on meetup</span>
+          <div className="modal-seller-info">
+            <div className="seller-avatar">
+              {product.seller.name
+                .split(" ")
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)}
             </div>
-            <div>
-              <strong>Listing status</strong>
-              <span>{getListingStatusMessage(product.listingState)}</span>
+            <div className="seller-details">
+              <strong>{product.seller.name}</strong>
+              {product.seller.rating?.count > 0 ? (
+                <SellerRatingBadge
+                  average={product.seller.rating.average}
+                  count={product.seller.rating.count}
+                  size="small"
+                />
+              ) : (
+                <span className="no-reviews">No reviews yet</span>
+              )}
             </div>
           </div>
-
-          <section className="seller-profile-section">
-            <button
-              type="button"
-              className={isSellerExpanded ? "seller-profile-card expanded" : "seller-profile-card"}
-              onClick={() => setIsSellerExpanded((current) => !current)}
-              aria-expanded={isSellerExpanded}
-            >
-              <div className="seller-profile-header">
-                <span className="chat-avatar">
-                  {product.seller.name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)}
-                </span>
-                <div>
-                  <strong>{product.seller.name}</strong>
-                  <span>{product.seller.status}</span>
-                </div>
-              </div>
-              <div className="seller-profile-meta">
-                <div>
-                  <strong>{sellerProfile.rating}</strong>
-                  <span>Seller rating</span>
-                </div>
-                <div>
-                  <strong>{sellerProfile.joined}</strong>
-                  <span>Profile note</span>
-                </div>
-                <div>
-                  <strong>{sellerProfile.listings}</strong>
-                  <span>Marketplace activity</span>
-                </div>
-              </div>
-              <span className="seller-profile-link">
-                {isSellerExpanded ? "Hide seller details" : "View seller details"}
-              </span>
-            </button>
-
-            {isSellerExpanded ? (
-              <div className="seller-expanded-panel">
-                <div className="seller-stats-grid">
-                  <div className="seller-stat-card">
-                    <strong>{sellerProfile.activeCount}</strong>
-                    <span>Active listings</span>
-                  </div>
-                  <div className="seller-stat-card">
-                    <strong>{sellerProfile.soldCount}</strong>
-                    <span>Items sold</span>
-                  </div>
-                  <div className="seller-stat-card">
-                    <strong>{sellerProfile.responseRate}</strong>
-                    <span>Response rate</span>
-                  </div>
-                </div>
-
-                <div className="seller-listings-preview">
-                  <div className="related-items-heading">
-                    <span className="section-label">Seller activity</span>
-                    <h3>More from {product.seller.name}</h3>
-                  </div>
-                  <div className="seller-mini-list">
-                    {sellerListings.slice(0, 3).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={
-                          item.id === product.id
-                            ? "seller-mini-card active"
-                            : "seller-mini-card"
-                        }
-                        onClick={() => onSelectRelatedProduct(item)}
-                      >
-                        <SmartImage src={item.imageVariants?.card ?? item.image} alt={item.title} className="seller-mini-image" />
-                        <div className="seller-mini-copy">
-                          <strong>{item.title}</strong>
-                          <span>
-                            {item.listingState === "active"
-                              ? `KES ${item.price.toLocaleString()}`
-                              : getListingStatusLabel(item.listingState)}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-          </section>
 
           <div className="modal-actions">
             <button
@@ -321,7 +243,7 @@ function ProductModal({
               className={isSaved ? "secondary-btn modal-save active" : "secondary-btn modal-save"}
               onClick={() => onSaveToggle(product.id)}
             >
-              {isSaved ? "Saved for later" : "Save item"}
+              {isSaved ? "Saved" : "Save"}
             </button>
             <button
               type="button"
@@ -330,76 +252,28 @@ function ProductModal({
             >
               Contact seller
             </button>
-            <button type="button" className="secondary-btn" onClick={handleShare}>
-              Share listing
-            </button>
+            {currentUser && !isSeller && product?.seller && (
+              <button
+                type="button"
+                className="secondary-btn modal-rate"
+                onClick={handleRateSeller}
+              >
+                Rate seller
+              </button>
+            )}
           </div>
-          {shareMessage ? <p className="share-feedback">{shareMessage}</p> : null}
-
-          <section className="trust-actions-section">
-            <div className="related-items-heading">
-              <span className="section-label">Trust tools</span>
-              <h3>Stay safe when meeting a seller</h3>
-            </div>
-            <div className="safety-tips-list">
-              <div className="safety-tip-card">
-                <strong>Meet in a public place</strong>
-                <span>Choose visible campus spots like the main gate, library entrance, or cafeteria.</span>
-              </div>
-              <div className="safety-tip-card">
-                <strong>Confirm the item first</strong>
-                <span>Check the condition, accessories, and serial details before paying.</span>
-              </div>
-              <div className="safety-tip-card">
-                <strong>Bring a friend if needed</strong>
-                <span>For high-value deals, share your meetup plan and avoid isolated locations.</span>
-              </div>
-            </div>
-
-            <div className="trust-action-buttons">
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => onReportListing(product)}
-              >
-                Report listing
-              </button>
-              <button
-                type="button"
-                className="danger-btn"
-                onClick={() => onBlockSeller(product)}
-              >
-                Block user
-              </button>
-            </div>
-          </section>
-
-          {relatedProducts.length > 0 ? (
-            <section className="related-items-section">
-              <div className="related-items-heading">
-                <span className="section-label">Related items</span>
-                <h3>Similar picks nearby</h3>
-              </div>
-              <div className="related-items-grid">
-                {relatedProducts.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="related-item-card"
-                    onClick={() => onSelectRelatedProduct(item)}
-                  >
-                    <SmartImage src={item.imageVariants?.card ?? item.image} alt={item.title} className="related-item-image" />
-                    <div className="related-item-copy">
-                      <strong>{item.title}</strong>
-                      <span>KES {item.price.toLocaleString()}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </div>
       </div>
+
+      {showRatingModal && (
+        <RatingModal
+          sellerName={product.seller.name}
+          listingTitle={product.title}
+          onSubmit={handleSubmitReview}
+          onClose={() => setShowRatingModal(false)}
+          isLoading={isSubmittingReview}
+        />
+      )}
     </div>
   );
 }

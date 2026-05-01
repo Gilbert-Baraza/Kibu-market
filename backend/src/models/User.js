@@ -47,13 +47,26 @@ const userSchema = new mongoose.Schema(
       default: null,
       select: false,
     },
-    savedListings: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Listing",
-      },
-    ],
-  },
+     savedListings: [
+       {
+         type: mongoose.Schema.Types.ObjectId,
+         ref: "Listing",
+       },
+     ],
+     rating: {
+       average: {
+         type: Number,
+         default: 0,
+         min: 0,
+         max: 5,
+       },
+       count: {
+         type: Number,
+         default: 0,
+         min: 0,
+       },
+     },
+   },
   {
     timestamps: true,
     toJSON: {

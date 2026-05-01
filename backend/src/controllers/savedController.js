@@ -65,7 +65,7 @@ export async function getSavedListings(req, res) {
   const pagedIds = savedListingIds.slice(skip, skip + limit);
   const listings = pagedIds.length > 0
     ? await Listing.find({ _id: { $in: pagedIds } })
-        .populate("seller", "name email avatar phone university")
+        .populate("seller", "name email avatar phone university rating")
     : [];
   const listingMap = new Map(listings.map((listing) => [String(listing._id), listing]));
   const orderedListings = pagedIds

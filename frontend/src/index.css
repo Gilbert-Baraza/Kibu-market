@@ -2405,6 +2405,239 @@ main, .navbar, .offline-banner-shell {
   background: var(--accent-primary-soft);
 }
 
+.modal-rate {
+  background: var(--accent-secondary-soft);
+  color: var(--accent-secondary);
+  border-color: var(--accent-secondary-soft);
+}
+
+.modal-rate:hover {
+  background: var(--accent-secondary);
+  color: white;
+  border-color: var(--accent-secondary);
+}
+
+/* Seller Rating Badge */
+.seller-rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.seller-rating-badge .star {
+  font-size: 0.875rem;
+}
+
+.rating-count {
+  color: var(--text-secondary);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+/* Seller Rating Badge */
+.seller-rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.seller-rating-badge .star {
+  font-size: 0.875rem;
+}
+
+.rating-count {
+  color: var(--text-secondary);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+/* Reviews section */
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.review-card {
+  padding: 0.85rem;
+  background: white;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.reviewer-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.reviewer-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-primary-soft);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.reviewer-info strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.review-date {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.review-comment {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.review-listing {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.review-listing svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+/* Seller Rating Badge */
+.seller-rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.seller-rating-badge .star {
+  font-size: 0.875rem;
+}
+
+.rating-count {
+  color: var(--text-secondary);
+  font-size: 0.625rem;
+  font-weight: 600;
+}
+
+/* Seller info with star rating */
+.modal-seller-info {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-xl);
+  margin-bottom: 1rem;
+}
+
+.seller-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-primary-soft);
+  color: var(--accent-primary);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.seller-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.seller-details strong {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.seller-rating {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.rating-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--accent-secondary);
+  font-size: 0.9rem;
+  letter-spacing: -1px;
+}
+
+.rating-stars .star.filled {
+  color: var(--accent-secondary);
+  text-shadow: 0 0 8px rgba(243, 171, 34, 0.4);
+}
+
+.rating-stars .star.half {
+  color: var(--accent-secondary);
+  opacity: 0.5;
+}
+
+.rating-stars .star:not(.filled):not(.half) {
+  color: #d1d5db;
+}
+
+.rating-value {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.seller-details .no-reviews {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
 .seller-profile-section,
 .seller-profile-card,
 .trust-actions-section,

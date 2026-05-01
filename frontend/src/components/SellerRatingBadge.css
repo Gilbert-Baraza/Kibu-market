@@ -1,0 +1,16 @@
+.seller-rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.rating-count {
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}

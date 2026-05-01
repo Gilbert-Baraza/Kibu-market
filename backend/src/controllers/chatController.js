@@ -7,7 +7,6 @@ import {
   startConversationForListing,
 } from "../services/chatService.js";
 import {
-  getConversationMessages as getHydratedConversationMessages,
   hydrateConversation,
   serializeConversation,
   serializeMessage,
@@ -38,7 +37,7 @@ export async function getConversations(req, res) {
   const [conversations, total] = await Promise.all([
     Conversation.find(filters)
       .populate("product", "title price images location status seller")
-      .populate("buyer seller participants", "name email avatar phone university")
+      .populate("buyer seller participants", "name email avatar phone university rating")
       .populate("lastSender", "name email avatar")
       .sort({ lastMessageAt: -1, updatedAt: -1 })
       .skip(skip)
@@ -100,15 +99,15 @@ export async function sendConversationMessage(req, res) {
   });
 
   const refreshedConversation = await hydrateConversation(conversation._id);
-  const conversationMessages = await getHydratedConversationMessages(conversation._id);
+  const serializedMessage = serializeMessage(message, refreshedConversation);
   const serializedConversation = serializeConversation(refreshedConversation, {
-    messages: conversationMessages,
+    messages: [message],
   });
 
   res.status(201).json({
     message: "Message sent successfully.",
     conversation: serializedConversation,
-    sentMessage: serializeMessage(message, refreshedConversation),
+    sentMessage: serializedMessage,
     data: serializedConversation,
   });
 }
@@ -119,18 +118,19 @@ export async function markConversationRead(req, res) {
     userId: req.user._id,
   });
 
-  const updatedConversation = await markConversationAsRead({
+  const { conversation: updatedConversation, readMessageIds } = await markConversationAsRead({
     conversation,
     userId: req.user._id,
   });
 
   const hydratedConversation = await hydrateConversation(updatedConversation._id);
-  const messages = await getHydratedConversationMessages(updatedConversation._id);
-  const serializedConversation = serializeConversation(hydratedConversation, { messages });
+  const serializedConversation = serializeConversation(hydratedConversation);
 
   res.json({
     message: "Conversation marked as read.",
     conversation: serializedConversation,
+    readMessageIds,
+    readerId: req.user.id,
     data: updatedConversation,
   });
 }

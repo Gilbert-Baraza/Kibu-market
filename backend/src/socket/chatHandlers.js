@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 import ApiError from "../utils/ApiError.js";
 import {
   createMessage,
@@ -50,26 +50,6 @@ function isUserViewingConversation(io, userId, conversationId) {
   }
 
   return getUserSocketIds(userId).some((socketId) => roomSockets.has(socketId));
-}
-
-async function emitConversationState(io, conversationId, options = {}) {
-  const conversation = await hydrateConversation(conversationId);
-  if (!conversation) {
-    return null;
-  }
-
-  const serializedConversation = serializeConversation(conversation, options);
-  io.to(getConversationRoomName(conversationId)).emit("conversation:updated", {
-    conversation: serializedConversation,
-  });
-
-  conversation.participants.forEach((participant) => {
-    io.to(`user:${participant.id}`).emit("conversation:updated", {
-      conversation: serializedConversation,
-    });
-  });
-
-  return serializedConversation;
 }
 
 export function registerChatHandlers(io, socket) {
@@ -174,19 +154,19 @@ export function registerChatHandlers(io, socket) {
       );
 
       if (recipient && isUserViewingConversation(io, recipient.id, refreshedConversation.id)) {
-        const readConversation = await markConversationAsRead({
+        const { conversation: readConversation, readMessageIds } = await markConversationAsRead({
           conversation: refreshedConversation,
           userId: recipient.id,
         });
         const hydratedReadConversation = await hydrateConversation(readConversation.id);
-        const readMessages = await getConversationMessages(hydratedReadConversation.id);
-        const readPayload = serializeConversation(hydratedReadConversation, { messages: readMessages });
+        const readPayload = serializeConversation(hydratedReadConversation);
 
         io.to(roomName).emit("conversation:read:update", {
           conversationId: hydratedReadConversation.id,
           unreadCounts: hydratedReadConversation.unreadCounts,
           conversation: readPayload,
           readerId: recipient.id,
+          readMessageIds,
         });
 
         hydratedReadConversation.participants.forEach((participant) => {
@@ -218,20 +198,20 @@ export function registerChatHandlers(io, socket) {
         userId: socket.user._id,
       });
 
-      const updatedConversation = await markConversationAsRead({
+      const { conversation: updatedConversation, readMessageIds } = await markConversationAsRead({
         conversation,
         userId: socket.user._id,
       });
 
       const hydratedConversation = await hydrateConversation(updatedConversation.id);
-      const readMessages = await getConversationMessages(hydratedConversation.id);
-      const serializedConversation = serializeConversation(hydratedConversation, { messages: readMessages });
+      const serializedConversation = serializeConversation(hydratedConversation);
 
       io.to(getConversationRoomName(conversationId)).emit("conversation:read:update", {
         conversationId,
         unreadCounts: hydratedConversation.unreadCounts,
         conversation: serializedConversation,
         readerId: socket.user.id,
+        readMessageIds,
       });
 
       hydratedConversation.participants.forEach((participant) => {
@@ -243,6 +223,8 @@ export function registerChatHandlers(io, socket) {
       acknowledge(ack, {
         ok: true,
         conversation: serializedConversation,
+        readerId: socket.user.id,
+        readMessageIds,
       });
     } catch (error) {
       emitSocketError(socket, ack, error);

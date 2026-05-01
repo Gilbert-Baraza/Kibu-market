@@ -2,7 +2,6 @@ import { Router } from "express";
 import asyncHandler from "../utils/asyncHandler.js";
 import validateRequest from "../middleware/validateRequest.js";
 import { requireAuth } from "../middleware/auth.js";
-import { chatRateLimit } from "../middleware/rateLimit.js";
 import {
   getConversation,
   getConversationMessages,
@@ -20,7 +19,6 @@ import {
 const router = Router();
 
 router.use(requireAuth);
-router.use(chatRateLimit);
 
 router.post("/start/:listingId", listingChatValidator, validateRequest, asyncHandler(startConversation));
 router.get("/conversations", asyncHandler(getConversations));

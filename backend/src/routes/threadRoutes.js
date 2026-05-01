@@ -1,9 +1,7 @@
 import { Router } from "express";
-import Conversation from "../models/Conversation.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import validateRequest from "../middleware/validateRequest.js";
 import { requireAuth } from "../middleware/auth.js";
-import { chatRateLimit } from "../middleware/rateLimit.js";
 import {
   getConversationMessages,
   getConversations,
@@ -20,15 +18,14 @@ import {
 } from "../services/chatService.js";
 import ApiError from "../utils/ApiError.js";
 import {
-  getConversationMessages as getHydratedConversationMessages,
   hydrateConversation,
   serializeConversation,
+  serializeMessage,
 } from "../socket/serializers.js";
 
 const router = Router();
 
 router.use(requireAuth);
-router.use(chatRateLimit);
 
 router.get("/", asyncHandler(getConversations));
 router.get(
@@ -54,19 +51,21 @@ router.post(
       currentUserId: req.user._id,
     });
 
-    await createMessage({
+    const sentMessage = await createMessage({
       conversation,
       senderId: req.user._id,
       text,
     });
 
     const refreshedConversation = await hydrateConversation(conversation._id);
-    const messages = await getHydratedConversationMessages(conversation._id);
-    const serializedConversation = serializeConversation(refreshedConversation, { messages });
+    const serializedConversation = serializeConversation(refreshedConversation, {
+      messages: [sentMessage],
+    });
 
     res.status(201).json({
       message: "Conversation started successfully.",
       conversation: serializedConversation,
+      sentMessage: serializeMessage(sentMessage, refreshedConversation),
       data: serializedConversation,
     });
   }),

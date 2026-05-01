@@ -634,7 +634,11 @@ export const apiClient = {
     const payload = await request(`/threads/${threadId}/read`, {
       method: "PATCH",
     });
-    return normalizeThread(unwrapEntity(payload));
+    return {
+      thread: normalizeThread(unwrapEntity(payload)),
+      readerId: payload?.readerId ?? null,
+      readMessageIds: ensureArray(payload?.readMessageIds).map((id) => String(id)),
+    };
   },
   async sendMessage({ threadId, productId, recipientId, text }) {
     const payload = await request(threadId ? `/threads/${threadId}/messages` : "/threads", {
@@ -678,5 +682,37 @@ export const apiClient = {
     });
 
     return payload?.urls ?? payload?.data?.urls ?? [payload?.url ?? payload?.data?.url].filter(Boolean);
+  },
+
+  // Review methods
+  async createReview({ sellerId, listingId, rating, comment }) {
+    const payload = await request("/reviews", {
+      method: "POST",
+      body: {
+        sellerId,
+        listingId,
+        rating: Number(rating),
+        comment: comment || "",
+      },
+    });
+    return unwrapEntity(payload);
+  },
+
+  async getSellerReviews(sellerId, { page = 1, limit = 10 } = {}) {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(Math.min(limit, 50)),
+    });
+    const payload = await request(`/reviews/users/${sellerId}/reviews?${params.toString()}`);
+    return payload?.data ?? payload;
+  },
+
+  async canReview({ sellerId, listingId }) {
+    const params = new URLSearchParams({
+      sellerId: String(sellerId),
+      listingId: String(listingId),
+    });
+    const payload = await request(`/reviews/check?${params.toString()}`);
+    return unwrapEntity(payload);
   },
 };

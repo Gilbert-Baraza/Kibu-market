@@ -237,9 +237,7 @@ function SellItemForm({
         <label className="form-field">
           <span>Listing status</span>
           <select name="listingState" value={formData.listingState} onChange={handleChange}>
-            <option value="draft">Draft</option>
-            <option value="paused">Paused</option>
-            <option value="active">Active</option>
+            <option value="available">Available</option>
             <option value="sold">Sold</option>
           </select>
         </label>

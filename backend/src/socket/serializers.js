@@ -28,10 +28,10 @@ export async function hydrateConversation(conversationId) {
       select: "title price images image location status seller category description createdAt updatedAt",
       populate: {
         path: "seller",
-        select: "name email avatar phone university",
+        select: "name email avatar phone university rating",
       },
     })
-    .populate("buyer seller participants", "name email avatar phone university")
+    .populate("buyer seller participants", "name email avatar phone university rating")
     .populate("lastSender", "name email avatar phone university");
 }
 

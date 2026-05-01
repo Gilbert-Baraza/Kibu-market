@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SmartImage from "./SmartImage";
 import PaginationControls from "./PaginationControls";
+import SellerRatingBadge from "./SellerRatingBadge";
+import StarRating from "./StarRating";
+import { apiClient } from "../api/client";
 import {
   hasValidationErrors,
   scrollToFirstValidationError,
@@ -29,6 +32,8 @@ function UserProfileScreen({
   onUpdateProfile,
   onViewListing,
 }) {
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [formData, setFormData] = useState(userProfile ?? emptyProfile);
   const [errors, setErrors] = useState({});
   const formRef = useRef(null);
@@ -36,6 +41,22 @@ function UserProfileScreen({
   useEffect(() => {
     setFormData(userProfile ?? emptyProfile);
   }, [userProfile]);
+
+  // Fetch reviews for current user (as seller)
+  useEffect(() => {
+    if (!currentUser) return;
+    const fetchReviews = async () => {
+      try {
+        const data = await apiClient.getSellerReviews(currentUser.id, { limit: 5 });
+        setReviews(data.reviews || []);
+      } catch (error) {
+        console.error("Failed to load reviews:", error);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+    fetchReviews();
+  }, [currentUser]);
 
   const validateProfileForm = (values) => ({
     name: validateRequiredText(values.name, "Full name", 2),
@@ -252,6 +273,76 @@ function UserProfileScreen({
                 <p className="profile-empty-copy">Your posted listings will appear here.</p>
               )}
             </div>
+          </section>
+
+          <section className="profile-panel">
+            <div className="profile-section-heading">
+              <span className="section-label">Seller reputation</span>
+              <h3>
+                {(currentUser?.rating?.count ?? 0) > 0 ? (
+                  <>
+                    <SellerRatingBadge
+                      average={currentUser.rating.average ?? 0}
+                      count={currentUser.rating.count ?? 0}
+                      size="medium"
+                    />
+                  </>
+                ) : (
+                  "No reviews yet"
+                )}
+              </h3>
+            </div>
+
+            {reviewsLoading ? (
+              <div className="profile-empty-copy">Loading reviews...</div>
+            ) : reviews.length > 0 ? (
+              <div className="reviews-list">
+                {reviews.map((review) => (
+                  <div key={review.id} className="review-card">
+                    <div className="review-header">
+                      <div className="reviewer-info">
+                        <span className="reviewer-avatar">
+                          {review.reviewerId?.name
+                            ?.split(" ")
+                            .map((p) => p[0])
+                            .join("")
+                            .slice(0, 2) || "?"}
+                        </span>
+                        <div>
+                          <strong>{review.reviewerId?.name || "Anonymous"}</strong>
+                          <StarRating
+                            value={review.rating}
+                            readonly
+                            size="small"
+                          />
+                        </div>
+                      </div>
+                      <span className="review-date">
+                        {new Date(review.createdAt).toLocaleDateString("en-KE", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </div>
+                    {review.comment && <p className="review-comment">{review.comment}</p>}
+                    {review.listingId && (
+                      <div className="review-listing">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                          <polyline points="9 22 9 12 15 12 15 22" />
+                        </svg>
+                        <span>{review.listingId.title}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="profile-empty-copy">
+                You haven't received any reviews yet. Complete a deal to get your first review!
+              </p>
+            )}
           </section>
         </div>
       </div>
