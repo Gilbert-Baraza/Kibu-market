@@ -3468,7 +3468,7 @@ main, .navbar, .offline-banner-shell {
   top: 0.2rem;
   bottom: 0.2rem;
   z-index: 10;
-  width: 14px;
+  width: 5px;
   pointer-events: none;
 }
 
@@ -3501,12 +3501,12 @@ main, .navbar, .offline-banner-shell {
 /* Small phones: even tighter */
 @media (max-width: 360px) {
   .compact-card {
-    flex-basis: 70vw;
+    flex-basis: 50vw;
     max-width: none;
   }
   .compact-media {
-    height: 76px;
-    max-height: 76px;
+    height: 50px;
+    max-height: 70px;
   }
   .compact-title {
     font-size: 0.72rem;
