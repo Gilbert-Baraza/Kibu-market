@@ -67,7 +67,7 @@ export function TrendingCarousel({ items = [], className = "" }) {
     if (price == null) return "";
     const num = Number(price);
     if (Number.isNaN(num)) return "";
-    return `NGN ${Math.round(num).toLocaleString()}`;
+    return `KES ${Math.round(num).toLocaleString()}`;
   };
 
   return (
@@ -117,16 +117,6 @@ export function TrendingCarousel({ items = [], className = "" }) {
                     </p>
                   )}
                 </div>
-              )}
-              {item.isTrending && (
-                <span className="compact-badge" aria-label="Trending">
-                  🔥
-                </span>
-              )}
-              {item.popularThisWeek && (
-                <span className="compact-badge compact-badge-alt" aria-label="Popular">
-                  ⭐
-                </span>
               )}
             </div>
           </article>
