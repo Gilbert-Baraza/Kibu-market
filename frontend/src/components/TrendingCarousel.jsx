@@ -1,22 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import SmartImage from "./SmartImage";
 
-/**
- * CompactTrendingCarousel
- *
- * Mobile-first, compact horizontal carousel with auto-scroll.
- * Optimized for small screens: landscape-style cards (wider than tall),
- * minimal vertical space, smooth 60fps scroll.
- *
- * UX improvements:
- * - Reduced height (~190px) increases viewport density → more listings visible
- * - Auto-scroll (3.5s interval) passively surfaces items without user effort
- * - Scroll-snap + swipe gestures feel native on touch devices
- * - Clean card surface focuses on image + price (key conversion drivers)
- * - Partial next-card peek hints at horizontal scrollability
- * - Pauses on interaction → respects user intent
- */
-
 export function TrendingCarousel({ items = [], className = "" }) {
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -32,17 +16,15 @@ export function TrendingCarousel({ items = [], className = "" }) {
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 8);
   }, []);
 
-  // Auto-scroll: advances by one card width every 3.5s
   const startAutoScroll = useCallback(() => {
     stopAutoScroll();
     autoScrollInterval.current = setInterval(() => {
       if (!scrollRef.current || isPaused) return;
-      const cardWidth = 320; // approx width + gap
+      const cardWidth = 320;
       const el = scrollRef.current;
       const nextScroll = el.scrollLeft + cardWidth;
       const maxScroll = el.scrollWidth - el.clientWidth;
       if (nextScroll >= maxScroll) {
-        // Loop back to start smoothly
         el.scrollTo({ left: 0, behavior: "smooth" });
       } else {
         el.scrollBy({ left: cardWidth, behavior: "smooth" });
@@ -57,7 +39,6 @@ export function TrendingCarousel({ items = [], className = "" }) {
     }
   }, []);
 
-  // Pause on interaction
   const handleInteractionStart = useCallback(() => {
     setIsPaused(true);
     stopAutoScroll();
@@ -65,10 +46,7 @@ export function TrendingCarousel({ items = [], className = "" }) {
 
   const handleInteractionEnd = useCallback(() => {
     setIsPaused(false);
-    // Resume after brief delay
-    setTimeout(() => {
-      startAutoScroll();
-    }, 4000);
+    setTimeout(() => startAutoScroll(), 4000);
   }, [startAutoScroll]);
 
   useEffect(() => {
@@ -89,12 +67,15 @@ export function TrendingCarousel({ items = [], className = "" }) {
     if (price == null) return "";
     const num = Number(price);
     if (Number.isNaN(num)) return "";
-    return `₦${num.toLocaleString()}`;
+    return `NGN ${Math.round(num).toLocaleString()}`;
   };
 
   return (
     <section className={`compact-trending ${className}`} aria-label="Trending listings">
-      {/* Fade overlays - subtle hints */}
+      <div className="trending-label-row">
+        <span className="trending-label">🔥 Trending this week</span>
+      </div>
+
       <div className="trending-fade-left" data-visible={canScrollLeft} aria-hidden="true" />
       <div className="trending-fade-right" data-visible={canScrollRight} aria-hidden="true" />
 
@@ -118,7 +99,6 @@ export function TrendingCarousel({ items = [], className = "" }) {
             role="group"
             aria-label={`${item.title || "Item"}, ${formatPrice(item.price)}`}
           >
-            {/* Image container - fixed aspect ratio 4:3 */}
             <div className="compact-media">
               <SmartImage
                 src={item.images?.[0] || item.image}
@@ -137,7 +117,6 @@ export function TrendingCarousel({ items = [], className = "" }) {
               )}
             </div>
 
-            {/* Content */}
             <div className="compact-body">
               <h3 className="compact-title" title={item.title}>
                 {formatTitle(item.title)}

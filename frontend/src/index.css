@@ -3311,9 +3311,27 @@ main, .navbar, .offline-banner-shell {
   padding: 0.25rem 0 0.5rem;
 }
 
+/* Trending label row */
+.trending-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.4rem 0.35rem;
+}
+
+.trending-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
 .compact-track {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.1rem;
   overflow-x: auto;
   overflow-y: visible;
   padding: 0.3rem 0.5rem 0.45rem;
