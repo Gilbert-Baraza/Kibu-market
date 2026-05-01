@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import SmartImage from "./SmartImage";
 
-export function TrendingCarousel({ items = [], className = "" }) {
+export function TrendingCarousel({ items = [], className = "", onProductClick }) {
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -98,6 +98,8 @@ export function TrendingCarousel({ items = [], className = "" }) {
             className="compact-card"
             role="group"
             aria-label={`${item.title || "Item"}, ${formatPrice(item.price)}`}
+            onClick={() => onProductClick?.(item)}
+            tabIndex={0}
           >
             <div className="compact-media">
               <SmartImage

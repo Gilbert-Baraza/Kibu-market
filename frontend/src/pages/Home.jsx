@@ -1514,6 +1514,7 @@ function Home() {
                             isTrending: idx < 3,
                             popularThisWeek: idx >= 3 && idx < 6,
                           }))}
+                          onProductClick={setSelectedProduct}
                         />
 
                        <ProductList
