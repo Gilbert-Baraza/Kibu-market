@@ -40,7 +40,7 @@ router.post(
   sendMessageValidator,
   validateRequest,
   asyncHandler(async (req, res) => {
-    const { productId, text } = req.body;
+    const { productId, text, clientMessageId } = req.body;
 
     if (!productId) {
       throw new ApiError(400, "productId is required.");
@@ -55,6 +55,7 @@ router.post(
       conversation,
       senderId: req.user._id,
       text,
+      clientMessageId,
     });
 
     const refreshedConversation = await hydrateConversation(conversation._id);

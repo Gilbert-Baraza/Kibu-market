@@ -12,7 +12,9 @@ function createSocket(token) {
   socketUrl = getSocketUrl();
   socketInstance = io(socketUrl, {
     autoConnect: false,
-    transports: ["websocket"],
+    transports: ["websocket", "polling"],
+    upgrade: true,
+    rememberUpgrade: true,
     auth: {
       token,
     },
@@ -65,6 +67,15 @@ export function emitWithAck(event, payload = {}, timeout = 10000) {
 
     socketInstance.timeout(timeout).emit(event, payload, (error, response) => {
       if (error) {
+        queueMicrotask(() => {
+          if (!socketInstance) {
+            return;
+          }
+
+          socketInstance.disconnect();
+          socketInstance.connect();
+        });
+
         reject(new Error("Socket request timed out."));
         return;
       }

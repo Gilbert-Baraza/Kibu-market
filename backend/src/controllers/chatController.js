@@ -96,6 +96,7 @@ export async function sendConversationMessage(req, res) {
     conversation,
     senderId: req.user._id,
     text: req.body.text,
+    clientMessageId: req.body.clientMessageId,
   });
 
   const refreshedConversation = await hydrateConversation(conversation._id);

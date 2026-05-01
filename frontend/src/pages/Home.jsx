@@ -247,6 +247,16 @@ function isRateLimitError(error) {
   return error instanceof ApiError && error.status === 429;
 }
 
+function isRecoverableSocketSendError(error) {
+  const message = String(error?.message ?? "").toLowerCase();
+
+  return (
+    message.includes("socket request timed out") ||
+    message.includes("socket is not connected") ||
+    message.includes("websocket error")
+  );
+}
+
 function getThreadUnreadCountForUser(thread, currentUser) {
   if (!currentUser || !thread) {
     return 0;
@@ -1277,7 +1287,13 @@ function Home() {
     }
   };
 
-  const handleSendMessage = async ({ threadId, productId, recipientId, text }) => {
+  const handleSendMessage = async ({
+    threadId,
+    productId,
+    recipientId,
+    text,
+    clientMessageId,
+  }) => {
     if (currentUser?.id && String(recipientId) === String(currentUser.id)) {
       showToast({
         type: "error",
@@ -1290,23 +1306,43 @@ function Home() {
     setIsMessageSending(true);
 
     try {
-      const updatedThread = isSocketConnected
-        ? normalizeThread(
+      let updatedThread;
+
+      if (isSocketConnected) {
+        try {
+          updatedThread = normalizeThread(
             (
               await sendSocketMessage({
                 conversationId: threadId,
                 productId,
                 recipientId,
                 text,
+                clientMessageId,
               })
             ).conversation,
-          )
-        : await apiClient.sendMessage({
+          );
+        } catch (error) {
+          if (!isRecoverableSocketSendError(error)) {
+            throw error;
+          }
+
+          updatedThread = await apiClient.sendMessage({
             threadId,
             productId,
             recipientId,
             text,
+            clientMessageId,
           });
+        }
+      } else {
+        updatedThread = await apiClient.sendMessage({
+          threadId,
+          productId,
+          recipientId,
+          text,
+          clientMessageId,
+        });
+      }
 
       applyThreadUpdate(updatedThread, {
         messageMode: threadId ? "append" : "replace",

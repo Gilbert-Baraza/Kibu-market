@@ -640,15 +640,16 @@ export const apiClient = {
       readMessageIds: ensureArray(payload?.readMessageIds).map((id) => String(id)),
     };
   },
-  async sendMessage({ threadId, productId, recipientId, text }) {
+  async sendMessage({ threadId, productId, recipientId, text, clientMessageId }) {
     const payload = await request(threadId ? `/threads/${threadId}/messages` : "/threads", {
       method: "POST",
       body: threadId
-        ? { text }
+        ? { text, clientMessageId }
         : {
             productId,
             recipientId,
             text,
+            clientMessageId,
           },
     });
 

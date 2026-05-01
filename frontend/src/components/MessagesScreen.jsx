@@ -407,6 +407,10 @@ function MessagesScreen({
       : selectedThread.sellerId;
 
     const pendingMessageId = `pending-${Date.now()}`;
+    const clientMessageId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? `message-${crypto.randomUUID()}`
+        : pendingMessageId;
     setPendingOutgoingMessage({
       id: pendingMessageId,
       threadKey: selectedThread.key,
@@ -419,6 +423,7 @@ function MessagesScreen({
         productId: selectedThread.product.id,
         recipientId,
         text: trimmedMessage,
+        clientMessageId,
       });
 
       if (result?.ok) {

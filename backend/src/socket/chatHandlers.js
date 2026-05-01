@@ -161,6 +161,7 @@ export function registerChatHandlers(io, socket) {
         conversation,
         senderId: socket.user._id,
         text,
+        clientMessageId: payload.clientMessageId,
       });
 
       const refreshedConversation = await hydrateConversation(conversation.id);

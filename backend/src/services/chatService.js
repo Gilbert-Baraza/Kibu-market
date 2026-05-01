@@ -74,13 +74,59 @@ export async function ensureConversationParticipant({ conversationId, userId }) 
   return conversation;
 }
 
-export async function createMessage({ conversation, senderId, text }) {
-  const message = await Message.create({
-    conversation: conversation._id,
+async function findExistingMessage({ conversationId, senderId, clientMessageId }) {
+  if (!clientMessageId) {
+    return null;
+  }
+
+  return Message.findOne({
+    conversation: conversationId,
     sender: senderId,
-    text,
-    readBy: [senderId],
+    clientMessageId,
+  }).populate("sender", "name email avatar phone university");
+}
+
+export async function createMessage({ conversation, senderId, text, clientMessageId = null }) {
+  const normalizedClientMessageId =
+    typeof clientMessageId === "string" && clientMessageId.trim()
+      ? clientMessageId.trim()
+      : null;
+
+  const existingMessage = await findExistingMessage({
+    conversationId: conversation._id,
+    senderId,
+    clientMessageId: normalizedClientMessageId,
   });
+
+  if (existingMessage) {
+    return existingMessage;
+  }
+
+  let message;
+
+  try {
+    message = await Message.create({
+      conversation: conversation._id,
+      sender: senderId,
+      text,
+      clientMessageId: normalizedClientMessageId,
+      readBy: [senderId],
+    });
+  } catch (error) {
+    if (error?.code === 11000 && normalizedClientMessageId) {
+      const duplicateMessage = await findExistingMessage({
+        conversationId: conversation._id,
+        senderId,
+        clientMessageId: normalizedClientMessageId,
+      });
+
+      if (duplicateMessage) {
+        return duplicateMessage;
+      }
+    }
+
+    throw error;
+  }
 
   const senderIsSeller =
     String(senderId) === String(conversation.seller._id ?? conversation.seller);

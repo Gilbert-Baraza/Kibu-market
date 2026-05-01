@@ -10,4 +10,9 @@ export const conversationIdValidator = [
 
 export const sendMessageValidator = [
   body("text").trim().isLength({ min: 1 }).withMessage("Message text is required."),
+  body("clientMessageId")
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 120 })
+    .withMessage("Invalid client message id."),
 ];
